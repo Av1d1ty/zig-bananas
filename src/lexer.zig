@@ -1,7 +1,7 @@
 const std = @import("std");
 const Token = @import("token.zig").Token;
 
-const Lexer = struct {
+pub const Lexer = struct {
     input: []const u8,
     position: u32 = 0,
     read_position: u32 = 0,
@@ -23,7 +23,7 @@ const Lexer = struct {
         return if (self.read_position >= self.input.len) 0 else self.input[self.read_position];
     }
 
-    fn next_token(self: *Lexer) Token {
+    pub fn next_token(self: *Lexer) Token {
         self.skip_whitespace();
         const token: Token = switch (self.ch) {
             '=' => blk: {
