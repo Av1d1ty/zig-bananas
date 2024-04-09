@@ -16,6 +16,8 @@ pub const Token = union(enum) {
 
     lt,
     gt,
+    eq,
+    not_eq,
 
     // Delimiters
     comma,

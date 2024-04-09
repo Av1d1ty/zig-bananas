@@ -19,10 +19,21 @@ const Lexer = struct {
         self.read_position += 1;
     }
 
+    fn peek_char(self: *Lexer) u8 {
+        return if (self.read_position >= self.input.len) 0 else self.input[self.read_position];
+    }
+
     fn next_token(self: *Lexer) Token {
         self.skip_whitespace();
         const token: Token = switch (self.ch) {
-            '=' => .assign,
+            '=' => blk: {
+                if (self.peek_char() == '=') {
+                    self.read_char();
+                    break :blk .eq;
+                } else {
+                    break :blk .assign;
+                }
+            },
             ';' => .semicolon,
             '(' => .lparen,
             ')' => .rparen,
@@ -33,7 +44,14 @@ const Lexer = struct {
             '/' => .slash,
             '{' => .lbrace,
             '}' => .rbrace,
-            '!' => .bang,
+            '!' => blk: {
+                if (self.peek_char() == '=') {
+                    self.read_char();
+                    break :blk .not_eq;
+                } else {
+                    break :blk .bang;
+                }
+            },
             '<' => .lt,
             '>' => .gt,
             0 => .eof,
@@ -96,79 +114,34 @@ test "next_token" {
         \\} else {
         \\  return false;
         \\}
+        \\
+        \\10 == 10;
+        \\10 != 9;
     ;
     const tests = [_]Token{
-        .let,
-        .{ .ident = "five" },
-        .assign,
-        .{ .int = "5" },
-        .semicolon,
-        .let,
-        .{ .ident = "ten" },
-        .assign,
-        .{ .int = "10" },
-        .semicolon,
-        .let,
-        .{ .ident = "add" },
-        .assign,
-        .function,
-        .lparen,
-        .{ .ident = "x" },
-        .comma,
-        .{ .ident = "y" },
-        .rparen,
-        .lbrace,
-        .{ .ident = "x" },
-        .plus,
-        .{ .ident = "y" },
-        .semicolon,
-        .rbrace,
-        .semicolon,
-        .let,
-        .{ .ident = "result" },
-        .assign,
-        .{ .ident = "add" },
-        .lparen,
-        .{ .ident = "five" },
-        .comma,
-        .{ .ident = "ten" },
-        .rparen,
-        .semicolon,
-        .bang,
-        .minus,
-        .slash,
-        .asterisk,
-        .{ .int = "5" },
-        .semicolon,
-        .{ .int = "5" },
-        .lt,
-        .{ .int = "10" },
-        .gt,
-        .{ .int = "5" },
-        .semicolon,
-        .if_token,
-        .lparen,
-        .{ .int = "5" },
-        .lt,
-        .{ .int = "10" },
-        .rparen,
-        .lbrace,
-        .return_token,
-        .true_token,
-        .semicolon,
-        .rbrace,
-        .else_token,
-        .lbrace,
-        .return_token,
-        .false_token,
-        .semicolon,
-        .rbrace,
-        .eof,
+        .let,              .{ .ident = "five" }, .assign,             .{ .int = "5" },
+        .semicolon,        .let,                 .{ .ident = "ten" }, .assign,
+        .{ .int = "10" },  .semicolon,           .let,                .{ .ident = "add" },
+        .assign,           .function,            .lparen,             .{ .ident = "x" },
+        .comma,            .{ .ident = "y" },    .rparen,             .lbrace,
+        .{ .ident = "x" }, .plus,                .{ .ident = "y" },   .semicolon,
+        .rbrace,           .semicolon,           .let,                .{ .ident = "result" },
+        .assign,           .{ .ident = "add" },  .lparen,             .{ .ident = "five" },
+        .comma,            .{ .ident = "ten" },  .rparen,             .semicolon,
+        .bang,             .minus,               .slash,              .asterisk,
+        .{ .int = "5" },   .semicolon,           .{ .int = "5" },     .lt,
+        .{ .int = "10" },  .gt,                  .{ .int = "5" },     .semicolon,
+        .if_token,         .lparen,              .{ .int = "5" },     .lt,
+        .{ .int = "10" },  .rparen,              .lbrace,             .return_token,
+        .true_token,       .semicolon,           .rbrace,             .else_token,
+        .lbrace,           .return_token,        .false_token,        .semicolon,
+        .rbrace,           .{ .int = "10" },     .eq,                 .{ .int = "10" },
+        .semicolon,        .{ .int = "10" },     .not_eq,             .{ .int = "9" },
+        .semicolon,        .eof,
     };
 
     var l = Lexer.init(input);
     for (tests) |expected| {
-        const tok = l.next_token();
-        try expectEqualDeep(expected, tok);
+        try expectEqualDeep(expected, l.next_token());
     }
 }
