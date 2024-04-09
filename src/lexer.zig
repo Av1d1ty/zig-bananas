@@ -28,8 +28,14 @@ const Lexer = struct {
             ')' => .rparen,
             ',' => .comma,
             '+' => .plus,
+            '-' => .minus,
+            '*' => .asterisk,
+            '/' => .slash,
             '{' => .lbrace,
             '}' => .rbrace,
+            '!' => .bang,
+            '<' => .lt,
+            '>' => .gt,
             0 => .eof,
             'A'...'Z', 'a'...'z', '_' => return Token.lookup_ident(self.read_identifier()),
             '0'...'9' => return .{ .int = self.read_int() },
@@ -81,6 +87,15 @@ test "next_token" {
         \\};
         \\
         \\let result = add(five, ten);
+        \\
+        \\!-/*5;
+        \\5 < 10 > 5;
+        \\
+        \\if (5 < 10) {
+        \\  return true;
+        \\} else {
+        \\  return false;
+        \\}
     ;
     const tests = [_]Token{
         .let,
@@ -119,13 +134,41 @@ test "next_token" {
         .{ .ident = "ten" },
         .rparen,
         .semicolon,
+        .bang,
+        .minus,
+        .slash,
+        .asterisk,
+        .{ .int = "5" },
+        .semicolon,
+        .{ .int = "5" },
+        .lt,
+        .{ .int = "10" },
+        .gt,
+        .{ .int = "5" },
+        .semicolon,
+        .if_token,
+        .lparen,
+        .{ .int = "5" },
+        .lt,
+        .{ .int = "10" },
+        .rparen,
+        .lbrace,
+        .return_token,
+        .true_token,
+        .semicolon,
+        .rbrace,
+        .else_token,
+        .lbrace,
+        .return_token,
+        .false_token,
+        .semicolon,
+        .rbrace,
         .eof,
     };
 
     var l = Lexer.init(input);
     for (tests) |expected| {
         const tok = l.next_token();
-        std.debug.print("expected: {s}; found: {s}\n", .{ @tagName(expected), @tagName(tok) });
         try expectEqualDeep(expected, tok);
     }
 }
