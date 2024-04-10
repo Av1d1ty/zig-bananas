@@ -49,4 +49,11 @@ pub const Token = union(enum) {
         });
         return map.get(ident) orelse .{ .ident = ident };
     }
+
+    pub fn get_value(self: Token) ?[]const u8 {
+        return switch (self) {
+            Token.ident, Token.int => |val| val,
+            else => null,
+        };
+    }
 };

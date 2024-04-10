@@ -8,17 +8,20 @@ pub fn start() !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
-    var input: [100]u8 = undefined;
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
 
     while (true) {
         _ = try stdout.write(prompt);
-        _ = try stdin.readUntilDelimiterOrEof(&input, '\n');
-
-        var l = Lexer.init(&input);
-        var token = l.next_token();
-        while (token != Token.eof and token != Token.illegal) : (token = l.next_token()) {
-            // stdout.print("Type: {}, Literal: {}", .{@tagName(token));
-            try stdout.print("{s}\n", .{@tagName(token)});
+        const maybe_input = try stdin.readUntilDelimiterOrEofAlloc(alloc, '\n', 100);
+        if (maybe_input) |input| {
+            defer alloc.free(input);
+            var l = Lexer.init(input);
+            var token = l.next_token();
+            while (token != Token.eof) : (token = l.next_token()) {
+                try stdout.print("{s} {s}\n", .{ @tagName(token), token.get_value() orelse "" });
+            }
         }
     }
 }
