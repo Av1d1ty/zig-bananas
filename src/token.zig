@@ -56,4 +56,8 @@ pub const Token = union(enum) {
             else => null,
         };
     }
+
+    // pub fn is(self: Token, token: Token) bool {
+    //     return @intFromEnum(self) == @intFromEnum(token);
+    // }
 };
