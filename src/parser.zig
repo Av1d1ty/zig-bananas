@@ -1,35 +1,37 @@
 const std = @import("std");
+const ast = @import("ast.zig");
 const Lexer = @import("lexer.zig").Lexer;
 const Token = @import("token.zig").Token;
-const ast = @import("ast.zig");
 
 const Parser = struct {
     lexer: *Lexer,
+    errors: std.ArrayList(anyerror),
 
     curr_token: Token = Token.illegal,
     peek_token: Token = Token.illegal,
 
     pub fn init(lexer: *Lexer) @This() {
-        var p = Parser{ .lexer = lexer };
-
+        var p = Parser{
+            .lexer = lexer,
+            .errors = std.ArrayList(anyerror).init(std.testing.allocator),
+        };
         p.next_token();
         p.next_token();
-
         return p;
     }
 
-    pub fn parse_program(self: *@This()) !*ast.Program {
-        var program = ast.Program{ .statements = std.ArrayList(ast.Statement)
-            .init(std.testing.allocator) };
-
-        while (self.curr_token != Token.eof) {
-            const statement = try self.parse_statement() orelse continue;
-            // FIX: problem here
+    pub fn parse_program(self: *@This()) !ast.Program {
+        var program = ast.Program{
+            .statements = std.ArrayList(ast.Statement).init(std.testing.allocator),
+        };
+        while (self.curr_token != Token.eof) : (self.next_token()) {
+            const statement = self.parse_statement() catch |e| {
+                try self.errors.append(e);
+                continue;
+            };
             try program.statements.append(statement);
-            std.debug.print("\ntoken3 {any}\n", .{program.statements.getLast().let.name});
-            self.next_token();
         }
-        return &program;
+        return program;
     }
 
     fn next_token(self: *@This()) void {
@@ -37,27 +39,22 @@ const Parser = struct {
         self.peek_token = self.lexer.next_token();
     }
 
-    fn parse_statement(self: *@This()) !?ast.Statement {
+    fn parse_statement(self: *@This()) !ast.Statement {
         return switch (self.curr_token) {
             .let => .{ .let = try self.parse_let_statement() },
-            else => null,
+            else => error.InvalidStatement,
         };
     }
 
-    fn parse_let_statement(self: *@This()) !*ast.LetStatement {
+    fn parse_let_statement(self: *@This()) !ast.LetStatement {
         const token = self.curr_token;
-        if (@intFromEnum(self.peek_token) == @intFromEnum(Token.ident)) {
-            self.next_token();
-        } else {
-            return error.NextTokenNotIdent;
+        switch (self.peek_token) {
+            .ident => self.next_token(),
+            else => return error.NextTokenNotIdent,
         }
-        const ident = ast.Identifier{
-            .token = self.curr_token,
-            // .value = self.curr_token.get_value(),
-        };
-        while (@intFromEnum(self.curr_token) != @intFromEnum(Token.semicolon)) : (self.next_token()) {}
-        var let_statement = ast.LetStatement{ .token = token, .name = ident };
-        return &let_statement;
+        const ident = ast.Identifier{ .token = self.curr_token };
+        while (self.curr_token != Token.semicolon) : (self.next_token()) {}
+        return ast.LetStatement{ .token = token, .name = ident };
     }
 };
 
@@ -72,22 +69,23 @@ test "let_statements" {
     var parser = Parser.init(&lexer);
     const program = try parser.parse_program();
     defer program.statements.deinit();
+    defer parser.errors.deinit();
+
+    // if (parser.errors.items.len > 0) {
+    //     for (parser.errors.items) |val| {
+    //         std.log.err("{s}\n", .{@errorName(val)});
+    //     }
+    //     unreachable;
+    // }
 
     try expect(program.statements.items.len == 3);
 
     const expected_identifiers = [_][]const u8{ "x", "y", "foobar" };
     for (program.statements.items, expected_identifiers) |statement, ident| {
-        try test_let_statement(statement, ident);
-    }
-}
-fn test_let_statement(statement: ast.Statement, ident: []const u8) !void {
-    switch (statement) {
-        .let => |val| {
-            std.debug.print("\ntoken {any}\n", .{val.name});
-            if (std.mem.eql(u8, val.name.token.get_value() orelse unreachable, ident)) {
-                return error.WrongIdentifier;
-            }
-        },
-        // else => return error.IsNotLet,
+        switch (statement) {
+            .let => |val| {
+                try expect(std.mem.eql(u8, val.name.token.get_value().?, ident));
+            },
+        }
     }
 }

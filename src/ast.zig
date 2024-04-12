@@ -13,7 +13,7 @@ const Node = union(enum) {
 };
 
 pub const Statement = union(enum) {
-    let: *LetStatement,
+    let: LetStatement,
     pub fn token_literal() void {}
 };
 
