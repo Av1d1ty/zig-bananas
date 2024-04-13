@@ -42,6 +42,7 @@ const Parser = struct {
     fn parse_statement(self: *@This()) !ast.Statement {
         return switch (self.curr_token) {
             .let => .{ .let = try self.parse_let_statement() },
+            .return_token => .{ .ret = self.parse_return_statement() },
             else => error.InvalidStatement,
         };
     }
@@ -55,6 +56,12 @@ const Parser = struct {
         const ident = ast.Identifier{ .token = self.curr_token };
         while (self.curr_token != Token.semicolon) : (self.next_token()) {}
         return ast.LetStatement{ .token = token, .name = ident };
+    }
+
+    fn parse_return_statement(self: *@This()) ast.ReturnStatement {
+        const token = self.curr_token;
+        while (self.curr_token != Token.semicolon) : (self.next_token()) {}
+        return ast.ReturnStatement{ .token = token, .value = null };
     }
 };
 
@@ -86,6 +93,27 @@ test "let_statements" {
             .let => |val| {
                 try expect(std.mem.eql(u8, val.name.token.get_value().?, ident));
             },
+            else => unreachable,
         }
+    }
+}
+
+test "return_statements" {
+    const input =
+        \\ return 5;
+        \\ return 10;
+        \\ return 4242;
+    ;
+    var lexer = Lexer.init(input);
+    var parser = Parser.init(&lexer);
+    const program = try parser.parse_program();
+    defer program.statements.deinit();
+    defer parser.errors.deinit();
+
+    try expect(program.statements.items.len == 3);
+
+    // const expected_values = [_][]const u8{ "5", "6", "4242" };
+    for (program.statements.items) |statement| {
+        try expect(statement.ret.token == Token.return_token);
     }
 }
