@@ -32,6 +32,11 @@ pub const ReturnStatement = struct {
     value: ?Expression,
 };
 
+pub const ExpressionStatement = struct {
+    token: Token,
+    expression: Expression,
+};
+
 pub const Identifier = struct {
     token: Token,
     // value: []const u8,
