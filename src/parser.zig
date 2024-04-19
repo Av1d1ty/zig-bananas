@@ -53,7 +53,7 @@ const Parser = struct {
         return switch (self.curr_token) {
             .let => .{ .let = try self.parse_let_statement() },
             .return_token => .{ .ret = self.parse_return_statement() },
-            else => .{ .exp = self.parse_expression_statement() },
+            else => .{ .exp = try self.parse_expression_statement() },
         };
     }
 
@@ -74,21 +74,25 @@ const Parser = struct {
         return ast.ReturnStatement{ .token = token, .value = null };
     }
 
-    fn parse_expression_statement(self: *@This()) ast.ExpressionStatement {
+    fn parse_expression_statement(self: *@This()) !ast.ExpressionStatement {
         const token = self.curr_token;
-        const expression = self.parse_expression();
+        const expression = try self.parse_expression();
         if (self.peek_token == Token.semicolon) self.next_token();
         return ast.ExpressionStatement{ .token = token, .expression = expression };
     }
 
-    fn parse_expression(self: *@This()) ast.Expression {
-        const left_exp = self.exec_prefix_fn(self.curr_token);
+    fn parse_expression(self: *@This()) !ast.Expression {
+        const left_exp = try self.exec_prefix_fn(self.curr_token);
         return left_exp;
     }
 
-    fn exec_prefix_fn(self: *@This(), token: Token) ast.Expression {
+    fn exec_prefix_fn(self: *@This(), token: Token) !ast.Expression {
         return switch (token) {
             .ident => ast.Expression{ .ident = ast.Identifier{ .token = self.curr_token } },
+            .int => ast.Expression{ .int = ast.IntegerLiteral{
+                .token = self.curr_token,
+                .value = try std.fmt.parseInt(i64, self.curr_token.get_value().?, 10),
+            } },
             else => unreachable,
         };
     }
@@ -147,8 +151,11 @@ test "return_statements" {
     }
 }
 
-test "identifier_expressions" {
-    const input = "foobar;";
+test "expressions" {
+    const input =
+        \\ foobar;
+        \\ 5;
+    ;
 
     var lexer = Lexer.init(input);
     var parser = Parser.init(&lexer);
@@ -156,9 +163,10 @@ test "identifier_expressions" {
     defer program.statements.deinit();
     defer parser.errors.deinit();
 
-    try expect(program.statements.items.len == 1);
+    try expect(program.statements.items.len == 2);
 
-    const expected_identifiers = [_][]const u8{"foobar"};
+    const expected_identifiers = [_][]const u8{ "foobar", "5" };
+    // NOTE: integer literal values are not validated for now
     for (program.statements.items, expected_identifiers) |statement, ident| {
         switch (statement) {
             .exp => |val| {
