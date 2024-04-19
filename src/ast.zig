@@ -15,10 +15,12 @@ const Node = union(enum) {
 pub const Statement = union(enum) {
     let: LetStatement,
     ret: ReturnStatement,
+    exp: ExpressionStatement,
     // pub fn token_literal() void {}
 };
 
-pub const Expression = struct {
+pub const Expression = union(enum) {
+    ident: Identifier,
     // pub fn token_literal() void {}
 };
 
