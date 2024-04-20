@@ -22,6 +22,7 @@ pub const Statement = union(enum) {
 pub const Expression = union(enum) {
     ident: Identifier,
     int: IntegerLiteral,
+    pref: Prefix,
     // pub fn token_literal() void {}
 };
 
@@ -47,6 +48,12 @@ pub const Identifier = struct {
 pub const IntegerLiteral = struct {
     token: Token,
     value: i64,
+};
+
+pub const Prefix = struct {
+    token: Token, // The prefix token, e.g. !
+    // operator: u8,
+    right: *Expression,
 };
 
 pub const Program = struct {

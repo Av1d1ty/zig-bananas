@@ -20,6 +20,11 @@ const Parser = struct {
     curr_token: Token = Token.illegal,
     peek_token: Token = Token.illegal,
 
+    // TODO: make a heap for Expression pointers
+    // const let_statement = try allocator.create(LetStatement);
+    // let_statement.* = .{...};
+    // return let_statement;
+
     pub fn init(lexer: *Lexer) @This() {
         var p = Parser{
             .lexer = lexer,
@@ -86,13 +91,20 @@ const Parser = struct {
         return left_exp;
     }
 
-    fn exec_prefix_fn(self: *@This(), token: Token) !ast.Expression {
+    // TODO: get rid of `anyerror`
+    fn exec_prefix_fn(self: *@This(), token: Token) anyerror!ast.Expression {
         return switch (token) {
             .ident => ast.Expression{ .ident = ast.Identifier{ .token = self.curr_token } },
             .int => ast.Expression{ .int = ast.IntegerLiteral{
                 .token = self.curr_token,
                 .value = try std.fmt.parseInt(i64, self.curr_token.get_value().?, 10),
             } },
+            .minus, .bang => blk: {
+                const tok = self.curr_token;
+                self.next_token();
+                var exp = try self.parse_expression();
+                break :blk ast.Expression{ .pref = ast.Prefix{ .token = tok, .right = &exp } };
+            },
             else => unreachable,
         };
     }
@@ -119,6 +131,7 @@ test "let_statements" {
     // }
 
     try expect(program.statements.items.len == 3);
+    try expect(parser.errors.items.len == 0);
 
     const expected_identifiers = [_][]const u8{ "x", "y", "foobar" };
     for (program.statements.items, expected_identifiers) |statement, ident| {
@@ -144,6 +157,7 @@ test "return_statements" {
     defer parser.errors.deinit();
 
     try expect(program.statements.items.len == 3);
+    try expect(parser.errors.items.len == 0);
 
     // const expected_values = [_][]const u8{ "5", "6", "4242" };
     for (program.statements.items) |statement| {
@@ -164,6 +178,7 @@ test "expressions" {
     defer parser.errors.deinit();
 
     try expect(program.statements.items.len == 2);
+    try expect(parser.errors.items.len == 0);
 
     const expected_identifiers = [_][]const u8{ "foobar", "5" };
     // NOTE: integer literal values are not validated for now
@@ -173,6 +188,44 @@ test "expressions" {
                 try expect(std.mem.eql(u8, val.token.get_value().?, ident));
             },
             else => unreachable,
+        }
+    }
+}
+
+test "prefix" {
+    const PrefixTestCase = struct {
+        input: []const u8,
+        operator: u8,
+        integer: i64,
+    };
+    const test_cases = [_]PrefixTestCase{
+        .{ .input = "!5", .operator = '!', .integer = 5 },
+        .{ .input = "-15", .operator = '-', .integer = 15 },
+    };
+
+    for (test_cases) |case| {
+        var lexer = Lexer.init(case.input);
+        var parser = Parser.init(&lexer);
+        const program = try parser.parse_program();
+        defer program.statements.deinit();
+        defer parser.errors.deinit();
+
+        try expect(program.statements.items.len == 1);
+        try expect(parser.errors.items.len == 0);
+
+        for (program.statements.items) |statement| {
+            switch (statement.exp.expression) {
+                .pref => |pref| {
+                    std.debug.print("\n{s}\n", .{@tagName(pref.token)});
+                    try expect(pref.right.int.value == case.integer);
+                    switch (pref.token) {
+                        .bang => try expect(case.operator == '!'),
+                        .minus => try expect(case.operator == '-'),
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
         }
     }
 }
