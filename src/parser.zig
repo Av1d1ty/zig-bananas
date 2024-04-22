@@ -22,11 +22,6 @@ const Parser = struct {
 
     expression_pointers: std.ArrayList(*ast.Expression),
 
-    // TODO: make a heap for Expression pointers
-    // const let_statement = try allocator.create(LetStatement);
-    // let_statement.* = .{...};
-    // return let_statement;
-
     pub fn init(lexer: *Lexer) @This() {
         var p = Parser{
             .lexer = lexer,
@@ -40,15 +35,13 @@ const Parser = struct {
 
     pub fn deinit(self: *@This()) void {
         self.errors.deinit();
-        for (self.expression_pointers.items) |exp| {
-            std.testing.allocator.destroy(exp);
-        }
         self.expression_pointers.deinit();
     }
 
     pub fn parse_program(self: *@This()) !ast.Program {
         var program = ast.Program{
             .statements = std.ArrayList(ast.Statement).init(std.testing.allocator),
+            .expression_pointers = std.ArrayList(*ast.Expression).init(std.testing.allocator),
         };
         while (self.curr_token != Token.eof) : (self.next_token()) {
             const statement = self.parse_statement() catch |e| {
@@ -57,6 +50,7 @@ const Parser = struct {
             };
             try program.statements.append(statement);
         }
+        program.expression_pointers = try self.expression_pointers.clone();
         return program;
     }
 
@@ -233,7 +227,7 @@ test "prefix" {
         for (program.statements.items) |statement| {
             switch (statement.exp.expression) {
                 .pref => |pref| {
-                    try expect(pref.right.*.int.value == case.integer);
+                    try expect(pref.right.int.value == case.integer);
                     switch (pref.token) {
                         .bang => try expect(case.operator == '!'),
                         .minus => try expect(case.operator == '-'),

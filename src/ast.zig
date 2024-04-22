@@ -58,13 +58,18 @@ pub const Prefix = struct {
 
 pub const Program = struct {
     statements: std.ArrayList(Statement),
+    expression_pointers: std.ArrayList(*Expression),
 
     // fn token_literal(self: *@This()) []const u8 {
     //     return if (self.statements.len > 0) self.statements[0].token_literal() else "";
     // }
 
     pub fn deinit(self: *@This()) void {
-        defer self.statements.deinit();
+        for (self.expression_pointers.items) |exp| {
+            std.testing.allocator.destroy(exp);
+        }
+        self.expression_pointers.deinit();
+        self.statements.deinit();
     }
 
     pub fn print(self: *@This()) void {
