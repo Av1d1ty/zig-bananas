@@ -20,6 +20,8 @@ const Parser = struct {
     curr_token: Token = Token.illegal,
     peek_token: Token = Token.illegal,
 
+    expression_pointers: std.ArrayList(*ast.Expression),
+
     // TODO: make a heap for Expression pointers
     // const let_statement = try allocator.create(LetStatement);
     // let_statement.* = .{...};
@@ -29,10 +31,19 @@ const Parser = struct {
         var p = Parser{
             .lexer = lexer,
             .errors = std.ArrayList(anyerror).init(std.testing.allocator),
+            .expression_pointers = std.ArrayList(*ast.Expression).init(std.testing.allocator),
         };
         p.next_token();
         p.next_token();
         return p;
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.errors.deinit();
+        for (self.expression_pointers.items) |exp| {
+            std.testing.allocator.destroy(exp);
+        }
+        self.expression_pointers.deinit();
     }
 
     pub fn parse_program(self: *@This()) !ast.Program {
@@ -102,8 +113,10 @@ const Parser = struct {
             .minus, .bang => blk: {
                 const tok = self.curr_token;
                 self.next_token();
-                var exp = try self.parse_expression();
-                break :blk ast.Expression{ .pref = ast.Prefix{ .token = tok, .right = &exp } };
+                const exp = try std.testing.allocator.create(ast.Expression);
+                exp.* = try self.parse_expression();
+                try self.expression_pointers.append(exp);
+                break :blk ast.Expression{ .pref = ast.Prefix{ .token = tok, .right = exp } };
             },
             else => unreachable,
         };
@@ -119,9 +132,10 @@ test "let_statements" {
     ;
     var lexer = Lexer.init(input);
     var parser = Parser.init(&lexer);
-    const program = try parser.parse_program();
-    defer program.statements.deinit();
-    defer parser.errors.deinit();
+    var program = try parser.parse_program();
+
+    defer parser.deinit();
+    defer program.deinit();
 
     // if (parser.errors.items.len > 0) {
     //     for (parser.errors.items) |val| {
@@ -152,9 +166,10 @@ test "return_statements" {
     ;
     var lexer = Lexer.init(input);
     var parser = Parser.init(&lexer);
-    const program = try parser.parse_program();
-    defer program.statements.deinit();
-    defer parser.errors.deinit();
+    var program = try parser.parse_program();
+
+    defer parser.deinit();
+    defer program.deinit();
 
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
@@ -173,9 +188,10 @@ test "expressions" {
 
     var lexer = Lexer.init(input);
     var parser = Parser.init(&lexer);
-    const program = try parser.parse_program();
-    defer program.statements.deinit();
-    defer parser.errors.deinit();
+    var program = try parser.parse_program();
+
+    defer parser.deinit();
+    defer program.deinit();
 
     try expect(program.statements.items.len == 2);
     try expect(parser.errors.items.len == 0);
@@ -206,9 +222,10 @@ test "prefix" {
     for (test_cases) |case| {
         var lexer = Lexer.init(case.input);
         var parser = Parser.init(&lexer);
-        const program = try parser.parse_program();
-        defer program.statements.deinit();
-        defer parser.errors.deinit();
+        var program = try parser.parse_program();
+
+        defer parser.deinit();
+        defer program.deinit();
 
         try expect(program.statements.items.len == 1);
         try expect(parser.errors.items.len == 0);
@@ -216,8 +233,7 @@ test "prefix" {
         for (program.statements.items) |statement| {
             switch (statement.exp.expression) {
                 .pref => |pref| {
-                    std.debug.print("\n{s}\n", .{@tagName(pref.token)});
-                    try expect(pref.right.int.value == case.integer);
+                    try expect(pref.right.*.int.value == case.integer);
                     switch (pref.token) {
                         .bang => try expect(case.operator == '!'),
                         .minus => try expect(case.operator == '-'),
