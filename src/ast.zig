@@ -72,10 +72,39 @@ pub const Program = struct {
         self.statements.deinit();
     }
 
-    pub fn print(self: *@This()) void {
-        std.debug.print("\n", .{});
+    pub fn print(self: *@This()) !void {
         for (self.statements.items, 1..) |statement, i| {
-            std.debug.print("{d}: {any}\n", .{ i, statement });
+            std.debug.print("\n{d}. {s} = {s}", .{
+                i,
+                @typeName(@TypeOf(statement)),
+                @tagName(statement),
+            });
+            switch (statement) {
+                .exp => |exp| {
+                    std.debug.print(": {s} -> {s} = {s}", .{
+                        @tagName(exp.token),
+                        @typeName(@TypeOf((exp.expression))),
+                        @tagName(exp.expression),
+                    });
+                    switch (exp.expression) {
+                        .pref => |pref| {
+                            std.debug.print(": {s} -> {s} = {s}", .{
+                                @tagName(pref.token),
+                                @typeName(@TypeOf((pref.right.*))),
+                                @tagName(pref.right.*),
+                            });
+                            switch (pref.right.*) {
+                                .int => |int| std.debug.print(": {d}", .{int.value}),
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+            // std.debug.print("{d}: {any}\n", .{ i, statement });
         }
+        std.debug.print("\n", .{});
     }
 };

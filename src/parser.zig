@@ -224,6 +224,8 @@ test "prefix" {
         try expect(program.statements.items.len == 1);
         try expect(parser.errors.items.len == 0);
 
+        try program.print();
+
         for (program.statements.items) |statement| {
             switch (statement.exp.expression) {
                 .pref => |pref| {
