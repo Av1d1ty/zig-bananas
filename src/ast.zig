@@ -23,6 +23,7 @@ pub const Expression = union(enum) {
     ident: Identifier,
     int: IntegerLiteral,
     pref: Prefix,
+    inf: Infix,
     // pub fn token_literal() void {}
 };
 
@@ -53,6 +54,13 @@ pub const IntegerLiteral = struct {
 pub const Prefix = struct {
     token: Token, // The prefix token, e.g. !
     // operator: u8,
+    right: *Expression,
+};
+
+pub const Infix = struct {
+    token: Token,
+    // operator: u8,
+    left: *Expression,
     right: *Expression,
 };
 

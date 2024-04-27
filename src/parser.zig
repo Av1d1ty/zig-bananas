@@ -11,6 +11,16 @@ const Precedence = enum {
     product,
     prefix,
     call,
+
+    pub fn of(token: Token) @This() {
+        return switch (token) {
+            .eq, .not_eq => .equals,
+            .lt, .gt => .less_greater,
+            .plus, .minus => .sum,
+            .slash, .asterisk => .product,
+            else => .lowest,
+        };
+    }
 };
 
 const Parser = struct {
@@ -92,12 +102,25 @@ const Parser = struct {
     }
 
     fn parse_expression(self: *@This()) !ast.Expression {
-        const left_exp = try self.exec_prefix_fn(self.curr_token);
+        var left_exp = try self.exec_prefix_fn(self.curr_token);
+        while (true) {
+            switch (self.peek_token) {
+                .semicolon => { // NOTE: can I use `break` here?
+                    return left_exp;
+                },
+                else => { // consider precedence
+                    self.next_token();
+                    left_exp = try self.exec_infix_fn(left_exp);
+                },
+            }
+        }
         return left_exp;
     }
 
     // TODO: get rid of `anyerror`
+    // NOTE: Do I really need to pass the token?
     fn exec_prefix_fn(self: *@This(), token: Token) anyerror!ast.Expression {
+        // std.debug.print("\ntoken: {any}", .{token});
         return switch (token) {
             .ident => ast.Expression{ .ident = ast.Identifier{ .token = self.curr_token } },
             .int => ast.Expression{ .int = ast.IntegerLiteral{
@@ -113,6 +136,27 @@ const Parser = struct {
                 break :blk ast.Expression{ .pref = ast.Prefix{ .token = tok, .right = exp } };
             },
             else => unreachable,
+        };
+    }
+
+    // TODO: get rid of `anyerror`
+    fn exec_infix_fn(self: *@This(), left: ast.Expression) anyerror!ast.Expression {
+        const token = self.curr_token;
+        var var_left = left;
+        // const operator = self.curr_token.
+        self.next_token();
+
+        const exp = try std.testing.allocator.create(ast.Expression);
+        exp.* = try self.parse_expression(); // precedence?
+        try self.expression_pointers.append(exp);
+
+        return ast.Expression{
+            .inf = ast.Infix{
+                .token = token,
+                // .operator = null,
+                .left = &var_left,
+                .right = exp,
+            },
         };
     }
 };
@@ -209,8 +253,8 @@ test "prefix" {
         integer: i64,
     };
     const test_cases = [_]PrefixTestCase{
-        .{ .input = "!5", .operator = '!', .integer = 5 },
-        .{ .input = "-15", .operator = '-', .integer = 15 },
+        .{ .input = "!5;", .operator = '!', .integer = 5 },
+        .{ .input = "-15;", .operator = '-', .integer = 15 },
     };
 
     for (test_cases) |case| {
@@ -224,8 +268,6 @@ test "prefix" {
         try expect(program.statements.items.len == 1);
         try expect(parser.errors.items.len == 0);
 
-        try program.print();
-
         for (program.statements.items) |statement| {
             switch (statement.exp.expression) {
                 .pref => |pref| {
@@ -233,6 +275,61 @@ test "prefix" {
                     switch (pref.token) {
                         .bang => try expect(case.operator == '!'),
                         .minus => try expect(case.operator == '-'),
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        }
+    }
+}
+
+test "infix" {
+    const InfixTestCase = struct {
+        input: []const u8,
+        left_value: i64,
+        operator: []const u8,
+        right_value: i64,
+    };
+    const test_cases = [_]InfixTestCase{
+        .{ .input = "5 + 5;", .left_value = 5, .operator = "+", .right_value = 5 },
+        .{ .input = "5 - 5;", .left_value = 5, .operator = "-", .right_value = 5 },
+        .{ .input = "5 * 5;", .left_value = 5, .operator = "*", .right_value = 5 },
+        .{ .input = "5 / 5;", .left_value = 5, .operator = "/", .right_value = 5 },
+        .{ .input = "5 > 5;", .left_value = 5, .operator = ">", .right_value = 5 },
+        .{ .input = "5 < 5;", .left_value = 5, .operator = "<", .right_value = 5 },
+        .{ .input = "5 == 5;", .left_value = 5, .operator = "==", .right_value = 5 },
+        .{ .input = "5 != 5;", .left_value = 5, .operator = "!=", .right_value = 5 },
+    };
+
+    for (test_cases) |case| {
+        var lexer = Lexer.init(case.input);
+        var parser = Parser.init(&lexer);
+        var program = try parser.parse_program();
+
+        defer parser.deinit();
+        defer program.deinit();
+
+        try expect(program.statements.items.len == 1);
+        try expect(parser.errors.items.len == 0);
+
+        for (program.statements.items) |statement| {
+            switch (statement.exp.expression) {
+                .inf => |inf| {
+                    std.debug.print("\ninf: {any}", .{inf});
+                    std.debug.print("\nleft: {any}", .{inf.left});
+                    std.debug.print("\nright: {any}", .{inf.right});
+                    try expect(inf.left.int.value == case.left_value);
+                    try expect(inf.right.int.value == case.right_value);
+                    switch (inf.token) {
+                        .plus => try expect(std.mem.eql(u8, case.operator, "+")),
+                        .minus => try expect(std.mem.eql(u8, case.operator, "-")),
+                        .asterisk => try expect(std.mem.eql(u8, case.operator, "*")),
+                        .slash => try expect(std.mem.eql(u8, case.operator, "/")),
+                        .gt => try expect(std.mem.eql(u8, case.operator, ">")),
+                        .lt => try expect(std.mem.eql(u8, case.operator, "<")),
+                        .eq => try expect(std.mem.eql(u8, case.operator, "==")),
+                        .not_eq => try expect(std.mem.eql(u8, case.operator, "!=")),
                         else => unreachable,
                     }
                 },
