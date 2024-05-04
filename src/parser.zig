@@ -48,6 +48,12 @@ const Parser = struct {
         self.expression_pointers.deinit();
     }
 
+    pub fn print_errors(self: *@This()) void {
+        for (self.errors.items) |val| {
+            std.log.err("{s}\n", .{@errorName(val)});
+        }
+    }
+
     pub fn parse_program(self: *@This()) !ast.Program {
         var program = ast.Program{
             .statements = std.ArrayList(ast.Statement).init(std.testing.allocator),
@@ -96,19 +102,17 @@ const Parser = struct {
 
     fn parse_expression_statement(self: *@This()) !ast.ExpressionStatement {
         const token = self.curr_token;
-        const expression = try self.parse_expression();
+        const expression = try self.parse_expression(Precedence.lowest);
         if (self.peek_token == Token.semicolon) self.next_token();
         return ast.ExpressionStatement{ .token = token, .expression = expression };
     }
 
-    fn parse_expression(self: *@This()) !*ast.Expression {
-        var left_exp = try self.exec_prefix_fn(self.curr_token);
-        while (true) {
+    fn parse_expression(self: *@This(), precedence: Precedence) !*ast.Expression {
+        var left_exp = try self.exec_prefix_fn();
+        while (@intFromEnum(precedence) < @intFromEnum(Precedence.of(self.peek_token))) {
             switch (self.peek_token) {
-                .semicolon => { // NOTE: can I use `break` here?
-                    return left_exp;
-                },
-                else => { // consider precedence
+                .semicolon => break,
+                else => {
                     self.next_token();
                     left_exp = try self.exec_infix_fn(left_exp);
                 },
@@ -118,8 +122,8 @@ const Parser = struct {
     }
 
     // TODO: get rid of `anyerror`
-    // NOTE: Do I really need to pass the token?
-    fn exec_prefix_fn(self: *@This(), token: Token) anyerror!*ast.Expression {
+    fn exec_prefix_fn(self: *@This()) anyerror!*ast.Expression {
+        const token = self.curr_token;
         const exp_ptr = try std.testing.allocator.create(ast.Expression);
         exp_ptr.* = switch (token) {
             .ident => ast.Expression{ .ident = ast.Identifier{ .token = self.curr_token } },
@@ -129,10 +133,11 @@ const Parser = struct {
             } },
             .minus, .bang => blk: {
                 const tok = self.curr_token;
+                const precedence = Precedence.of(tok);
                 self.next_token();
                 break :blk ast.Expression{ .pref = ast.Prefix{
                     .token = tok,
-                    .right = try self.parse_expression(),
+                    .right = try self.parse_expression(precedence),
                 } };
             },
             else => unreachable,
@@ -144,15 +149,14 @@ const Parser = struct {
     // TODO: get rid of `anyerror`
     fn exec_infix_fn(self: *@This(), left: *ast.Expression) anyerror!*ast.Expression {
         const token = self.curr_token;
-        // const operator = self.curr_token.
+        const precedence = Precedence.of(token);
         self.next_token();
         const exp_ptr = try std.testing.allocator.create(ast.Expression);
         exp_ptr.* = ast.Expression{
             .inf = ast.Infix{
                 .token = token,
-                // .operator = null,
                 .left = left,
-                .right = try self.parse_expression(), // precedence?,
+                .right = try self.parse_expression(precedence),
             },
         };
         try self.expression_pointers.append(exp_ptr);
@@ -173,13 +177,6 @@ test "let_statements" {
 
     defer parser.deinit();
     defer program.deinit();
-
-    // if (parser.errors.items.len > 0) {
-    //     for (parser.errors.items) |val| {
-    //         std.log.err("{s}\n", .{@errorName(val)});
-    //     }
-    //     unreachable;
-    // }
 
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
@@ -211,7 +208,6 @@ test "return_statements" {
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
 
-    // const expected_values = [_][]const u8{ "5", "6", "4242" };
     for (program.statements.items) |statement| {
         try expect(statement.ret.token == Token.return_token);
     }
@@ -315,7 +311,11 @@ test "infix" {
         for (program.statements.items) |statement| {
             switch (statement.exp.expression.*) {
                 .inf => |inf| {
-                    std.debug.print("\ninf: {any}\n", .{inf});
+                    std.debug.print("\ninfix: {d} {s} {d}", .{
+                        inf.left.int.value,
+                        @tagName(inf.token),
+                        inf.right.int.value,
+                    });
                     try expect(inf.left.int.value == case.left_value);
                     try expect(inf.right.int.value == case.right_value);
                     try expect(@intFromEnum(inf.token) == @intFromEnum(case.operator));
