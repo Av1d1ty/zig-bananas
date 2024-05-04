@@ -30,6 +30,7 @@ const Parser = struct {
     curr_token: Token = Token.illegal,
     peek_token: Token = Token.illegal,
 
+    // TODO: pass allocator as parameter
     expression_pointers: std.ArrayList(*ast.Expression),
 
     pub fn init(lexer: *Lexer) @This() {
@@ -181,6 +182,8 @@ test "let_statements" {
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
 
+    try program.print();
+
     const expected_identifiers = [_][]const u8{ "x", "y", "foobar" };
     for (program.statements.items, expected_identifiers) |statement, ident| {
         switch (statement) {
@@ -311,11 +314,6 @@ test "infix" {
         for (program.statements.items) |statement| {
             switch (statement.exp.expression.*) {
                 .inf => |inf| {
-                    std.debug.print("\ninfix: {d} {s} {d}", .{
-                        inf.left.int.value,
-                        @tagName(inf.token),
-                        inf.right.int.value,
-                    });
                     try expect(inf.left.int.value == case.left_value);
                     try expect(inf.right.int.value == case.right_value);
                     try expect(@intFromEnum(inf.token) == @intFromEnum(case.operator));

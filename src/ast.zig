@@ -4,19 +4,12 @@ const Token = @import("token.zig").Token;
 const Node = union(enum) {
     s: Statement,
     e: Expression,
-
-    // pub fn token_literal(self: *@This()) []const u8 {
-    //     switch (self) {
-    //         inline else => |case| return case.token_literal(),
-    //     }
-    // }
 };
 
 pub const Statement = union(enum) {
     let: LetStatement,
     ret: ReturnStatement,
     exp: ExpressionStatement,
-    // pub fn token_literal() void {}
 };
 
 pub const Expression = union(enum) {
@@ -24,12 +17,18 @@ pub const Expression = union(enum) {
     int: IntegerLiteral,
     pref: Prefix,
     inf: Infix,
-    // pub fn token_literal() void {}
 };
 
 pub const LetStatement = struct {
     token: Token,
     name: Identifier,
+
+    pub fn string(self: @This(), buf: []u8) ![]u8 {
+        return std.fmt.bufPrint(buf, "{s} {s} = ;\n", .{
+            @tagName(self.token),
+            self.name.token.get_value().?,
+        });
+    }
 };
 
 pub const ReturnStatement = struct {
@@ -53,13 +52,11 @@ pub const IntegerLiteral = struct {
 
 pub const Prefix = struct {
     token: Token, // The prefix token, e.g. !
-    // operator: u8,
     right: *Expression,
 };
 
 pub const Infix = struct {
     token: Token,
-    // operator: u8,
     left: *Expression,
     right: *Expression,
 };
@@ -67,10 +64,6 @@ pub const Infix = struct {
 pub const Program = struct {
     statements: std.ArrayList(Statement),
     expression_pointers: std.ArrayList(*Expression),
-
-    // fn token_literal(self: *@This()) []const u8 {
-    //     return if (self.statements.len > 0) self.statements[0].token_literal() else "";
-    // }
 
     pub fn deinit(self: *@This()) void {
         for (self.expression_pointers.items) |exp| {
@@ -81,38 +74,19 @@ pub const Program = struct {
     }
 
     pub fn print(self: *@This()) !void {
-        for (self.statements.items, 1..) |statement, i| {
-            std.debug.print("\n{d}. {s} = {s}", .{
-                i,
-                @typeName(@TypeOf(statement)),
-                @tagName(statement),
-            });
-            switch (statement) {
-                .exp => |exp| {
-                    std.debug.print(": {s} -> {s} = {s}", .{
-                        @tagName(exp.token),
-                        @typeName(@TypeOf((exp.expression))),
-                        @tagName(exp.expression),
-                    });
-                    switch (exp.expression) {
-                        .pref => |pref| {
-                            std.debug.print(": {s} -> {s} = {s}", .{
-                                @tagName(pref.token),
-                                @typeName(@TypeOf((pref.right.*))),
-                                @tagName(pref.right.*),
-                            });
-                            switch (pref.right.*) {
-                                .int => |int| std.debug.print(": {d}", .{int.value}),
-                                else => unreachable,
-                            }
-                        },
-                        else => unreachable,
-                    }
+        var out = std.ArrayList(u8).init(std.testing.allocator);
+        var buf: [1024]u8 = undefined;
+        for (self.statements.items) |st| {
+            switch (st) {
+                .let => |let| {
+                    try out.appendSlice(try let.string(&buf));
                 },
-                else => unreachable,
+                else => {},
             }
-            // std.debug.print("{d}: {any}\n", .{ i, statement });
         }
-        std.debug.print("\n", .{});
+        // TODO: write to stdout
+        const out_slice = try out.toOwnedSlice();
+        defer std.testing.allocator.free(out_slice);
+        std.debug.print("\n{s}", .{out_slice});
     }
 };
