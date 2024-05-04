@@ -39,7 +39,7 @@ pub const ReturnStatement = struct {
 
 pub const ExpressionStatement = struct {
     token: Token,
-    expression: Expression,
+    expression: *Expression,
 };
 
 pub const Identifier = struct {

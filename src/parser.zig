@@ -101,7 +101,7 @@ const Parser = struct {
         return ast.ExpressionStatement{ .token = token, .expression = expression };
     }
 
-    fn parse_expression(self: *@This()) !ast.Expression {
+    fn parse_expression(self: *@This()) !*ast.Expression {
         var left_exp = try self.exec_prefix_fn(self.curr_token);
         while (true) {
             switch (self.peek_token) {
@@ -119,9 +119,9 @@ const Parser = struct {
 
     // TODO: get rid of `anyerror`
     // NOTE: Do I really need to pass the token?
-    fn exec_prefix_fn(self: *@This(), token: Token) anyerror!ast.Expression {
-        // std.debug.print("\ntoken: {any}", .{token});
-        return switch (token) {
+    fn exec_prefix_fn(self: *@This(), token: Token) anyerror!*ast.Expression {
+        const exp_ptr = try std.testing.allocator.create(ast.Expression);
+        exp_ptr.* = switch (token) {
             .ident => ast.Expression{ .ident = ast.Identifier{ .token = self.curr_token } },
             .int => ast.Expression{ .int = ast.IntegerLiteral{
                 .token = self.curr_token,
@@ -130,34 +130,33 @@ const Parser = struct {
             .minus, .bang => blk: {
                 const tok = self.curr_token;
                 self.next_token();
-                const exp = try std.testing.allocator.create(ast.Expression);
-                exp.* = try self.parse_expression();
-                try self.expression_pointers.append(exp);
-                break :blk ast.Expression{ .pref = ast.Prefix{ .token = tok, .right = exp } };
+                break :blk ast.Expression{ .pref = ast.Prefix{
+                    .token = tok,
+                    .right = try self.parse_expression(),
+                } };
             },
             else => unreachable,
         };
+        try self.expression_pointers.append(exp_ptr);
+        return exp_ptr;
     }
 
     // TODO: get rid of `anyerror`
-    fn exec_infix_fn(self: *@This(), left: ast.Expression) anyerror!ast.Expression {
+    fn exec_infix_fn(self: *@This(), left: *ast.Expression) anyerror!*ast.Expression {
         const token = self.curr_token;
-        var var_left = left;
         // const operator = self.curr_token.
         self.next_token();
-
-        const exp = try std.testing.allocator.create(ast.Expression);
-        exp.* = try self.parse_expression(); // precedence?
-        try self.expression_pointers.append(exp);
-
-        return ast.Expression{
+        const exp_ptr = try std.testing.allocator.create(ast.Expression);
+        exp_ptr.* = ast.Expression{
             .inf = ast.Infix{
                 .token = token,
                 // .operator = null,
-                .left = &var_left,
-                .right = exp,
+                .left = left,
+                .right = try self.parse_expression(), // precedence?,
             },
         };
+        try self.expression_pointers.append(exp_ptr);
+        return exp_ptr;
     }
 };
 
@@ -269,7 +268,7 @@ test "prefix" {
         try expect(parser.errors.items.len == 0);
 
         for (program.statements.items) |statement| {
-            switch (statement.exp.expression) {
+            switch (statement.exp.expression.*) {
                 .pref => |pref| {
                     try expect(pref.right.int.value == case.integer);
                     switch (pref.token) {
@@ -288,18 +287,18 @@ test "infix" {
     const InfixTestCase = struct {
         input: []const u8,
         left_value: i64,
-        operator: []const u8,
+        operator: Token,
         right_value: i64,
     };
     const test_cases = [_]InfixTestCase{
-        .{ .input = "5 + 5;", .left_value = 5, .operator = "+", .right_value = 5 },
-        .{ .input = "5 - 5;", .left_value = 5, .operator = "-", .right_value = 5 },
-        .{ .input = "5 * 5;", .left_value = 5, .operator = "*", .right_value = 5 },
-        .{ .input = "5 / 5;", .left_value = 5, .operator = "/", .right_value = 5 },
-        .{ .input = "5 > 5;", .left_value = 5, .operator = ">", .right_value = 5 },
-        .{ .input = "5 < 5;", .left_value = 5, .operator = "<", .right_value = 5 },
-        .{ .input = "5 == 5;", .left_value = 5, .operator = "==", .right_value = 5 },
-        .{ .input = "5 != 5;", .left_value = 5, .operator = "!=", .right_value = 5 },
+        .{ .input = "5 + 5;", .left_value = 5, .operator = .plus, .right_value = 5 },
+        .{ .input = "5 - 5;", .left_value = 5, .operator = .minus, .right_value = 5 },
+        .{ .input = "5 * 5;", .left_value = 5, .operator = .asterisk, .right_value = 5 },
+        .{ .input = "5 / 5;", .left_value = 5, .operator = .slash, .right_value = 5 },
+        .{ .input = "5 > 5;", .left_value = 5, .operator = .gt, .right_value = 5 },
+        .{ .input = "5 < 5;", .left_value = 5, .operator = .lt, .right_value = 5 },
+        .{ .input = "5 == 5;", .left_value = 5, .operator = .eq, .right_value = 5 },
+        .{ .input = "5 != 5;", .left_value = 5, .operator = .not_eq, .right_value = 5 },
     };
 
     for (test_cases) |case| {
@@ -314,24 +313,12 @@ test "infix" {
         try expect(parser.errors.items.len == 0);
 
         for (program.statements.items) |statement| {
-            switch (statement.exp.expression) {
+            switch (statement.exp.expression.*) {
                 .inf => |inf| {
-                    std.debug.print("\ninf: {any}", .{inf});
-                    std.debug.print("\nleft: {any}", .{inf.left});
-                    std.debug.print("\nright: {any}", .{inf.right});
+                    std.debug.print("\ninf: {any}\n", .{inf});
                     try expect(inf.left.int.value == case.left_value);
                     try expect(inf.right.int.value == case.right_value);
-                    switch (inf.token) {
-                        .plus => try expect(std.mem.eql(u8, case.operator, "+")),
-                        .minus => try expect(std.mem.eql(u8, case.operator, "-")),
-                        .asterisk => try expect(std.mem.eql(u8, case.operator, "*")),
-                        .slash => try expect(std.mem.eql(u8, case.operator, "/")),
-                        .gt => try expect(std.mem.eql(u8, case.operator, ">")),
-                        .lt => try expect(std.mem.eql(u8, case.operator, "<")),
-                        .eq => try expect(std.mem.eql(u8, case.operator, "==")),
-                        .not_eq => try expect(std.mem.eql(u8, case.operator, "!=")),
-                        else => unreachable,
-                    }
+                    try expect(@intFromEnum(inf.token) == @intFromEnum(case.operator));
                 },
                 else => unreachable,
             }
