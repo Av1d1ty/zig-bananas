@@ -128,7 +128,7 @@ const Parser = struct {
         const exp_ptr = try std.testing.allocator.create(ast.Expression);
         exp_ptr.* = switch (token) {
             .ident => ast.Expression{ .ident = ast.Identifier{ .token = self.curr_token } },
-            .int => ast.Expression{ .int = ast.IntegerLiteral{
+            .int => ast.Expression{ .int = ast.Integer{
                 .token = self.curr_token,
                 .value = try std.fmt.parseInt(i64, self.curr_token.get_value().?, 10),
             } },
@@ -207,6 +207,8 @@ test "return_statements" {
 
     defer parser.deinit();
     defer program.deinit();
+
+    try program.print();
 
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
