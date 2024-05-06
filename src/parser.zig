@@ -55,11 +55,8 @@ const Parser = struct {
         }
     }
 
-    pub fn parse_program(self: *@This()) !ast.Program {
-        var program = ast.Program{
-            .statements = std.ArrayList(ast.Statement).init(std.testing.allocator),
-            .expression_pointers = std.ArrayList(*ast.Expression).init(std.testing.allocator),
-        };
+    pub fn parse_program(self: *@This()) !*ast.Program {
+        var program = try ast.Program.init(std.testing.allocator);
         while (self.curr_token != Token.eof) : (self.next_token()) {
             const statement = self.parse_statement() catch |e| {
                 try self.errors.append(e);

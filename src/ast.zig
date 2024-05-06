@@ -87,17 +87,27 @@ pub const Infix = struct {
 };
 
 pub const Program = struct {
+    allocator: std.mem.Allocator,
     statements: std.ArrayList(Statement),
     expression_pointers: std.ArrayList(*Expression),
 
-    // TODO: init function
+    pub fn init(allocator: std.mem.Allocator) !*Program {
+        const program_ptr = try allocator.create(Program);
+        program_ptr.* = Program{
+            .allocator = allocator,
+            .statements = std.ArrayList(Statement).init(allocator),
+            .expression_pointers = std.ArrayList(*Expression).init(allocator),
+        };
+        return program_ptr;
+    }
 
     pub fn deinit(self: *@This()) void {
         for (self.expression_pointers.items) |exp| {
-            std.testing.allocator.destroy(exp);
+            self.allocator.destroy(exp);
         }
         self.expression_pointers.deinit();
         self.statements.deinit();
+        self.allocator.destroy(self);
     }
 
     pub fn string(self: *@This()) ![]u8 {
@@ -118,10 +128,7 @@ pub const Program = struct {
 
 const expect = std.testing.expect;
 test "string" {
-    var program = Program{
-        .statements = std.ArrayList(Statement).init(std.testing.allocator),
-        .expression_pointers = std.ArrayList(*Expression).init(std.testing.allocator),
-    };
+    var program = try Program.init(std.testing.allocator);
     defer program.deinit();
     try program.statements.append(.{
         .let = LetStatement{
