@@ -231,6 +231,8 @@ test "expressions" {
     try expect(program.statements.items.len == 2);
     try expect(parser.errors.items.len == 0);
 
+    try program.print();
+
     const expected_identifiers = [_][]const u8{ "foobar", "5" };
     // NOTE: integer literal values are not validated for now
     for (program.statements.items, expected_identifiers) |statement, ident| {
@@ -261,6 +263,8 @@ test "prefix" {
 
         defer parser.deinit();
         defer program.deinit();
+
+        try program.print();
 
         try expect(program.statements.items.len == 1);
         try expect(parser.errors.items.len == 0);

@@ -1,4 +1,5 @@
 const std = @import("std");
+const bufPrint = std.fmt.bufPrint;
 const Token = @import("token.zig").Token;
 
 const Node = union(enum) {
@@ -14,6 +15,12 @@ pub const Statement = union(enum) {
     pub fn string(self: @This(), buf: []u8) ![]u8 {
         return switch (self) {
             inline else => |st| st.string(buf),
+            // inline else => |st| bufPrint(buf, "{s}\n", .{try st.string(buf)}),
+            // inline else => |st| blk: {
+            //     const r = try st.string(buf);
+            //     std.debug.print("{s}", .{r});
+            //     break :blk bufPrint(buf, "{s}\n", .{r});
+            // },
         };
     }
 };
@@ -26,9 +33,13 @@ pub const Expression = union(enum) {
 
     pub fn string(self: @This(), buf: []u8) ![]u8 {
         return switch (self) {
-            .ident => |ident| std.fmt.bufPrint(buf, "{s}", .{ident.token.get_value().?}),
-            .int => |int| std.fmt.bufPrint(buf, "{d}", .{int.value}),
-            .pref, .inf => unreachable,
+            .ident => |ident| bufPrint(buf, "{s}", .{ident.token.get_value().?}),
+            .int => |int| bufPrint(buf, "{d}", .{int.value}),
+            .pref => |pref| bufPrint(buf, "({s}{s})", .{
+                @tagName(pref.token),
+                try pref.right.string(buf),
+            }),
+            .inf => unreachable,
         };
     }
 };
@@ -38,7 +49,7 @@ pub const LetStatement = struct {
     name: Identifier,
 
     pub fn string(self: @This(), buf: []u8) ![]u8 {
-        return std.fmt.bufPrint(buf, "{s} {s} = ;\n", .{
+        return bufPrint(buf, "{s} {s} = ", .{
             @tagName(self.token),
             self.name.token.get_value().?,
         });
@@ -50,7 +61,7 @@ pub const ReturnStatement = struct {
     value: ?Expression,
 
     pub fn string(self: @This(), buf: []u8) ![]u8 {
-        return std.fmt.bufPrint(buf, "{s} {?};\n", .{
+        return bufPrint(buf, "{s} {?}", .{
             @tagName(self.token),
             self.value,
         });
@@ -110,11 +121,13 @@ pub const Program = struct {
         self.allocator.destroy(self);
     }
 
+    /// The caller owns the returned memory.
     pub fn string(self: *@This()) ![]u8 {
         var out = std.ArrayList(u8).init(std.testing.allocator);
         var buf: [1024]u8 = undefined;
         for (self.statements.items) |st| {
             try out.appendSlice(try st.string(&buf));
+            try out.appendSlice(";\n");
         }
         return out.toOwnedSlice();
     }
