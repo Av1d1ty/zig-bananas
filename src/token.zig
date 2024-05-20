@@ -56,4 +56,15 @@ pub const Token = union(enum) {
             else => null,
         };
     }
+
+    /// Get string representation of the given token
+    pub fn get_string(self: Token) []const u8 {
+        // TODO: complete switch
+        return switch (self) {
+            .minus => "-",
+            .plus => "+",
+            .bang => "!",
+            else => unreachable,
+        };
+    }
 };

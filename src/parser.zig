@@ -179,7 +179,7 @@ test "let_statements" {
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
 
-    try program.print();
+    std.debug.print("{}", .{program});
 
     const expected_identifiers = [_][]const u8{ "x", "y", "foobar" };
     for (program.statements.items, expected_identifiers) |statement, ident| {
@@ -205,7 +205,7 @@ test "return_statements" {
     defer parser.deinit();
     defer program.deinit();
 
-    try program.print();
+    std.debug.print("{}", .{program});
 
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
@@ -231,7 +231,7 @@ test "expressions" {
     try expect(program.statements.items.len == 2);
     try expect(parser.errors.items.len == 0);
 
-    try program.print();
+    std.debug.print("{}", .{program});
 
     const expected_identifiers = [_][]const u8{ "foobar", "5" };
     // NOTE: integer literal values are not validated for now
@@ -264,7 +264,7 @@ test "prefix" {
         defer parser.deinit();
         defer program.deinit();
 
-        try program.print();
+        std.debug.print("{}", .{program});
 
         try expect(program.statements.items.len == 1);
         try expect(parser.errors.items.len == 0);

@@ -1,26 +1,27 @@
 const std = @import("std");
-const bufPrint = std.fmt.bufPrint;
 const Token = @import("token.zig").Token;
-
-const Node = union(enum) {
-    s: Statement,
-    e: Expression,
-};
 
 pub const Statement = union(enum) {
     let: LetStatement,
     ret: ReturnStatement,
     exp: ExpressionStatement,
 
-    pub fn string(self: @This(), buf: []u8) ![]u8 {
+    pub fn format(
+        self: @This(),
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
-            inline else => |st| st.string(buf),
-            // inline else => |st| bufPrint(buf, "{s}\n", .{try st.string(buf)}),
-            // inline else => |st| blk: {
-            //     const r = try st.string(buf);
-            //     std.debug.print("{s}", .{r});
-            //     break :blk bufPrint(buf, "{s}\n", .{r});
-            // },
+            // TODO: print expression value
+            .let => |let| writer.print("{s} {s} = ;\n", .{
+                @tagName(let.token),
+                let.name.token.get_value().?,
+            }),
+            .ret => |ret| writer.print("{s} {?};\n", .{ @tagName(ret.token), ret.value }),
+            .exp => |exp| writer.print("{};\n", .{exp.expression}),
         };
     }
 };
@@ -31,15 +32,23 @@ pub const Expression = union(enum) {
     pref: Prefix,
     inf: Infix,
 
-    pub fn string(self: @This(), buf: []u8) ![]u8 {
+    pub fn format(
+        self: @This(),
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = options;
+        _ = fmt;
         return switch (self) {
-            .ident => |ident| bufPrint(buf, "{s}", .{ident.token.get_value().?}),
-            .int => |int| bufPrint(buf, "{d}", .{int.value}),
-            .pref => |pref| bufPrint(buf, "({s}{s})", .{
-                @tagName(pref.token),
-                try pref.right.string(buf),
+            .ident => |ident| writer.print("{s}", .{ident.token.get_value().?}),
+            .int => |int| writer.print("{d}", .{int.value}),
+            .pref => |pref| writer.print("({s}{s})", .{ pref.token.get_string(), pref.right }),
+            .inf => |inf| writer.print("({s} {s} {s})", .{
+                inf.left,
+                inf.token.get_string(),
+                inf.right,
             }),
-            .inf => unreachable,
         };
     }
 };
@@ -47,34 +56,18 @@ pub const Expression = union(enum) {
 pub const LetStatement = struct {
     token: Token,
     name: Identifier,
-
-    pub fn string(self: @This(), buf: []u8) ![]u8 {
-        return bufPrint(buf, "{s} {s} = ", .{
-            @tagName(self.token),
-            self.name.token.get_value().?,
-        });
-    }
+    // TODO: parse
+    // value: Expression,
 };
 
 pub const ReturnStatement = struct {
     token: Token,
     value: ?Expression,
-
-    pub fn string(self: @This(), buf: []u8) ![]u8 {
-        return bufPrint(buf, "{s} {?}", .{
-            @tagName(self.token),
-            self.value,
-        });
-    }
 };
 
 pub const ExpressionStatement = struct {
     token: Token,
     expression: *Expression,
-
-    pub fn string(self: @This(), buf: []u8) ![]u8 {
-        return self.expression.string(buf);
-    }
 };
 
 pub const Identifier = struct {
@@ -121,25 +114,21 @@ pub const Program = struct {
         self.allocator.destroy(self);
     }
 
-    /// The caller owns the returned memory.
-    pub fn string(self: *@This()) ![]u8 {
-        var out = std.ArrayList(u8).init(std.testing.allocator);
-        var buf: [1024]u8 = undefined;
+    pub fn format(
+        self: @This(),
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
+        try writer.writeAll("\n");
         for (self.statements.items) |st| {
-            try out.appendSlice(try st.string(&buf));
-            try out.appendSlice(";\n");
+            try writer.print("{}", .{st});
         }
-        return out.toOwnedSlice();
-    }
-    pub fn print(self: *@This()) !void {
-        const out_slice = try self.string();
-        defer std.testing.allocator.free(out_slice);
-        // TODO: write to stdout
-        std.debug.print("\n{s}\n", .{out_slice});
     }
 };
 
-const expect = std.testing.expect;
 test "string" {
     var program = try Program.init(std.testing.allocator);
     defer program.deinit();
@@ -151,8 +140,5 @@ test "string" {
             },
         },
     });
-    const program_sting = try program.string();
-    defer std.testing.allocator.free(program_sting);
-    // std.debug.print("\n1: {any}\n", .{program_sting});
-    try expect(std.mem.eql(u8, program_sting, "let myVar = ;\n"));
+    try std.testing.expectFmt("\nlet myVar = ;\n", "{}", .{program});
 }
