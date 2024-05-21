@@ -326,23 +326,36 @@ test "infix" {
 }
 
 test "precedence" {
-    // const TestCase = struct {
-    //     input: []const u8,
-    //     expected: []const u8,
-    // };
-    // const test_cases = [_]TestCase{
-    //     .{ .input = "-a * b", .expected = "((-a) * b)" },
-    // };
     const input =
         \\-a * b;
+        \\!-a;
+        \\a + b + c;
+        \\a + b - c;
+        \\a * b * c;
+        \\a * b / c;
+        \\a + b / c;
+        \\a + b * c + d / e - f;
+        \\3 + 4; -5 * 5;
+        \\5 > 4 == 3 < 4;
+        \\5 < 4 != 3 > 4;
+        \\3 + 4 * 5 == 3 * 1 + 4 * 5;
     ;
     const expected =
         \\((-a) * b);
+        \\(!(-a));
+        \\((a + b) + c);
+        \\((a + b) - c);
+        \\((a * b) * c);
+        \\((a * b) / c);
+        \\(a + (b / c));
+        \\(((a + (b * c)) + (d / e)) - f);
+        \\(3 + 4);
+        \\((-5) * 5);
+        \\((5 > 4) == (3 < 4));
+        \\((5 < 4) != (3 > 4));
+        \\((3 + (4 * 5)) == ((3 * 1) + (4 * 5)));
         \\
     ;
-    // for (test_cases) |case| {
-    //     try std.testing.expectEqualStrings(case.input, case.expected);
-    // }
 
     var lexer = Lexer.init(input);
     var parser = Parser.init(&lexer);

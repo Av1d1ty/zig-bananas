@@ -61,11 +61,16 @@ pub const Token = union(enum) {
     pub fn get_string(self: Token) []const u8 {
         // TODO: complete switch
         return switch (self) {
+            .assign => "=",
             .minus => "-",
             .plus => "+",
             .asterisk => "*",
             .slash => "/",
             .bang => "!",
+            .lt => "<",
+            .gt => ">",
+            .eq => "==",
+            .not_eq => "!=",
             else => unreachable,
         };
     }
