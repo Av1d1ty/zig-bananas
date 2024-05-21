@@ -39,12 +39,12 @@ pub const Expression = union(enum) {
         writer: anytype,
     ) !void {
         _ = options;
-        _ = fmt;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
             .ident => |ident| writer.print("{s}", .{ident.token.get_value().?}),
             .int => |int| writer.print("{d}", .{int.value}),
-            .pref => |pref| writer.print("({s}{s})", .{ pref.token.get_string(), pref.right }),
-            .inf => |inf| writer.print("({s} {s} {s})", .{
+            .pref => |pref| writer.print("({s}{})", .{ pref.token.get_string(), pref.right }),
+            .inf => |inf| writer.print("({} {s} {})", .{
                 inf.left,
                 inf.token.get_string(),
                 inf.right,
@@ -122,7 +122,7 @@ pub const Program = struct {
     ) !void {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
-        try writer.writeAll("\n");
+        // try writer.writeAll("\n");
         for (self.statements.items) |st| {
             try writer.print("{}", .{st});
         }
@@ -140,5 +140,5 @@ test "string" {
             },
         },
     });
-    try std.testing.expectFmt("\nlet myVar = ;\n", "{}", .{program});
+    try std.testing.expectFmt("let myVar = ;\n", "{}", .{program});
 }

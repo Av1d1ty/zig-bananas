@@ -106,13 +106,13 @@ const Parser = struct {
     }
 
     fn parse_expression(self: *@This(), precedence: Precedence) !*ast.Expression {
-        var left_exp = try self.exec_prefix_fn();
+        var left_exp = try self.parse_prefix_expr();
         while (@intFromEnum(precedence) < @intFromEnum(Precedence.of(self.peek_token))) {
             switch (self.peek_token) {
                 .semicolon => break,
                 else => {
                     self.next_token();
-                    left_exp = try self.exec_infix_fn(left_exp);
+                    left_exp = try self.parse_infix_expr(left_exp);
                 },
             }
         }
@@ -120,7 +120,7 @@ const Parser = struct {
     }
 
     // TODO: get rid of `anyerror`
-    fn exec_prefix_fn(self: *@This()) anyerror!*ast.Expression {
+    fn parse_prefix_expr(self: *@This()) anyerror!*ast.Expression {
         const token = self.curr_token;
         const exp_ptr = try std.testing.allocator.create(ast.Expression);
         exp_ptr.* = switch (token) {
@@ -131,11 +131,10 @@ const Parser = struct {
             } },
             .minus, .bang => blk: {
                 const tok = self.curr_token;
-                const precedence = Precedence.of(tok);
                 self.next_token();
                 break :blk ast.Expression{ .pref = ast.Prefix{
                     .token = tok,
-                    .right = try self.parse_expression(precedence),
+                    .right = try self.parse_expression(Precedence.prefix),
                 } };
             },
             else => unreachable,
@@ -145,16 +144,15 @@ const Parser = struct {
     }
 
     // TODO: get rid of `anyerror`
-    fn exec_infix_fn(self: *@This(), left: *ast.Expression) anyerror!*ast.Expression {
+    fn parse_infix_expr(self: *@This(), left: *ast.Expression) anyerror!*ast.Expression {
         const token = self.curr_token;
-        const precedence = Precedence.of(token);
         self.next_token();
         const exp_ptr = try std.testing.allocator.create(ast.Expression);
         exp_ptr.* = ast.Expression{
             .inf = ast.Infix{
                 .token = token,
                 .left = left,
-                .right = try self.parse_expression(precedence),
+                .right = try self.parse_expression(Precedence.of(token)),
             },
         };
         try self.expression_pointers.append(exp_ptr);
@@ -179,7 +177,7 @@ test "let_statements" {
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
 
-    std.debug.print("{}", .{program});
+    std.debug.print("\n{}", .{program});
 
     const expected_identifiers = [_][]const u8{ "x", "y", "foobar" };
     for (program.statements.items, expected_identifiers) |statement, ident| {
@@ -205,7 +203,7 @@ test "return_statements" {
     defer parser.deinit();
     defer program.deinit();
 
-    std.debug.print("{}", .{program});
+    std.debug.print("\n{}", .{program});
 
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
@@ -231,7 +229,7 @@ test "expressions" {
     try expect(program.statements.items.len == 2);
     try expect(parser.errors.items.len == 0);
 
-    std.debug.print("{}", .{program});
+    std.debug.print("\n{}", .{program});
 
     const expected_identifiers = [_][]const u8{ "foobar", "5" };
     // NOTE: integer literal values are not validated for now
@@ -264,7 +262,7 @@ test "prefix" {
         defer parser.deinit();
         defer program.deinit();
 
-        std.debug.print("{}", .{program});
+        std.debug.print("\n{}", .{program});
 
         try expect(program.statements.items.len == 1);
         try expect(parser.errors.items.len == 0);
@@ -325,4 +323,34 @@ test "infix" {
             }
         }
     }
+}
+
+test "precedence" {
+    // const TestCase = struct {
+    //     input: []const u8,
+    //     expected: []const u8,
+    // };
+    // const test_cases = [_]TestCase{
+    //     .{ .input = "-a * b", .expected = "((-a) * b)" },
+    // };
+    const input =
+        \\-a * b;
+    ;
+    const expected =
+        \\((-a) * b);
+        \\
+    ;
+    // for (test_cases) |case| {
+    //     try std.testing.expectEqualStrings(case.input, case.expected);
+    // }
+
+    var lexer = Lexer.init(input);
+    var parser = Parser.init(&lexer);
+    var program = try parser.parse_program();
+
+    defer parser.deinit();
+    defer program.deinit();
+
+    try expect(parser.errors.items.len == 0);
+    try std.testing.expectFmt(expected, "{}", .{program});
 }

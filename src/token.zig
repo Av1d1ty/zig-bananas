@@ -63,6 +63,8 @@ pub const Token = union(enum) {
         return switch (self) {
             .minus => "-",
             .plus => "+",
+            .asterisk => "*",
+            .slash => "/",
             .bang => "!",
             else => unreachable,
         };
