@@ -107,14 +107,11 @@ const Parser = struct {
 
     fn parse_expression(self: *@This(), precedence: Precedence) !*ast.Expression {
         var left_exp = try self.parse_prefix_expr();
+        // NOTE: no need to check for `;`, because it has the lowest precendece
+        // and the loop will break anyway
         while (@intFromEnum(precedence) < @intFromEnum(Precedence.of(self.peek_token))) {
-            switch (self.peek_token) {
-                .semicolon => break,
-                else => {
-                    self.next_token();
-                    left_exp = try self.parse_infix_expr(left_exp);
-                },
-            }
+            self.next_token();
+            left_exp = try self.parse_infix_expr(left_exp);
         }
         return left_exp;
     }

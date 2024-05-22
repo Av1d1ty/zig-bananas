@@ -66,7 +66,7 @@ pub const ReturnStatement = struct {
 };
 
 pub const ExpressionStatement = struct {
-    token: Token,
+    token: Token, // FIX: is it needed at all?
     expression: *Expression,
 };
 
