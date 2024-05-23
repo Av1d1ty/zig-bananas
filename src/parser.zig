@@ -25,19 +25,20 @@ const Precedence = enum {
 
 const Parser = struct {
     lexer: *Lexer,
+    allocator: std.mem.Allocator,
     errors: std.ArrayList(anyerror),
 
     curr_token: Token = Token.illegal,
     peek_token: Token = Token.illegal,
 
-    // TODO: pass allocator as parameter
     expression_pointers: std.ArrayList(*ast.Expression),
 
-    pub fn init(lexer: *Lexer) @This() {
+    pub fn init(lexer: *Lexer, allocator: std.mem.Allocator) @This() {
         var p = Parser{
             .lexer = lexer,
-            .errors = std.ArrayList(anyerror).init(std.testing.allocator),
-            .expression_pointers = std.ArrayList(*ast.Expression).init(std.testing.allocator),
+            .allocator = allocator,
+            .errors = std.ArrayList(anyerror).init(allocator),
+            .expression_pointers = std.ArrayList(*ast.Expression).init(allocator),
         };
         p.next_token();
         p.next_token();
@@ -56,7 +57,7 @@ const Parser = struct {
     }
 
     pub fn parse_program(self: *@This()) !*ast.Program {
-        var program = try ast.Program.init(std.testing.allocator);
+        var program = try ast.Program.init(self.allocator);
         while (self.curr_token != Token.eof) : (self.next_token()) {
             const statement = self.parse_statement() catch |e| {
                 try self.errors.append(e);
@@ -119,7 +120,7 @@ const Parser = struct {
     // TODO: get rid of `anyerror`
     fn parse_prefix_expr(self: *@This()) anyerror!*ast.Expression {
         const token = self.curr_token;
-        const exp_ptr = try std.testing.allocator.create(ast.Expression);
+        const exp_ptr = try self.allocator.create(ast.Expression);
         exp_ptr.* = switch (token) {
             .ident => ast.Expression{ .ident = ast.Identifier{ .token = self.curr_token } },
             .int => ast.Expression{ .int = ast.Integer{
@@ -144,7 +145,7 @@ const Parser = struct {
     fn parse_infix_expr(self: *@This(), left: *ast.Expression) anyerror!*ast.Expression {
         const token = self.curr_token;
         self.next_token();
-        const exp_ptr = try std.testing.allocator.create(ast.Expression);
+        const exp_ptr = try self.allocator.create(ast.Expression);
         exp_ptr.* = ast.Expression{
             .inf = ast.Infix{
                 .token = token,
@@ -165,7 +166,7 @@ test "let_statements" {
         \\ let foobar = 838383;
     ;
     var lexer = Lexer.init(input);
-    var parser = Parser.init(&lexer);
+    var parser = Parser.init(&lexer, std.testing.allocator);
     var program = try parser.parse_program();
 
     defer parser.deinit();
@@ -194,7 +195,7 @@ test "return_statements" {
         \\ return 4242;
     ;
     var lexer = Lexer.init(input);
-    var parser = Parser.init(&lexer);
+    var parser = Parser.init(&lexer, std.testing.allocator);
     var program = try parser.parse_program();
 
     defer parser.deinit();
@@ -217,7 +218,7 @@ test "expressions" {
     ;
 
     var lexer = Lexer.init(input);
-    var parser = Parser.init(&lexer);
+    var parser = Parser.init(&lexer, std.testing.allocator);
     var program = try parser.parse_program();
 
     defer parser.deinit();
@@ -253,7 +254,7 @@ test "prefix" {
 
     for (test_cases) |case| {
         var lexer = Lexer.init(case.input);
-        var parser = Parser.init(&lexer);
+        var parser = Parser.init(&lexer, std.testing.allocator);
         var program = try parser.parse_program();
 
         defer parser.deinit();
@@ -300,7 +301,7 @@ test "infix" {
 
     for (test_cases) |case| {
         var lexer = Lexer.init(case.input);
-        var parser = Parser.init(&lexer);
+        var parser = Parser.init(&lexer, std.testing.allocator);
         var program = try parser.parse_program();
 
         defer parser.deinit();
@@ -355,7 +356,7 @@ test "precedence" {
     ;
 
     var lexer = Lexer.init(input);
-    var parser = Parser.init(&lexer);
+    var parser = Parser.init(&lexer, std.testing.allocator);
     var program = try parser.parse_program();
 
     defer parser.deinit();
