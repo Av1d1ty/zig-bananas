@@ -52,17 +52,17 @@ pub const Expression = union(enum) {
 pub const LetStatement = struct {
     token: Token,
     name: Identifier,
-    value: *Expression,
+    value: *const Expression,
 };
 
 pub const ReturnStatement = struct {
     token: Token,
-    value: ?*Expression,
+    value: ?*const Expression,
 };
 
 pub const ExpressionStatement = struct {
     // token: Token,
-    expression: *Expression,
+    expression: *const Expression,
 };
 
 pub const Identifier = struct {
@@ -77,26 +77,26 @@ pub const Integer = struct {
 
 pub const Prefix = struct {
     token: Token, // The prefix token, e.g. `!`
-    right: *Expression,
+    right: *const Expression,
 };
 
 pub const Infix = struct {
     token: Token,
-    left: *Expression,
-    right: *Expression,
+    left: *const Expression,
+    right: *const Expression,
 };
 
 pub const Program = struct {
     allocator: std.mem.Allocator,
     statements: std.ArrayList(Statement),
-    expression_pointers: std.ArrayList(*Expression),
+    expression_pointers: std.ArrayList(*const Expression),
 
     pub fn init(allocator: std.mem.Allocator) !*Program {
         const program_ptr = try allocator.create(Program);
         program_ptr.* = Program{
             .allocator = allocator,
             .statements = std.ArrayList(Statement).init(allocator),
-            .expression_pointers = std.ArrayList(*Expression).init(allocator),
+            .expression_pointers = std.ArrayList(*const Expression).init(allocator),
         };
         return program_ptr;
     }
@@ -128,10 +128,6 @@ pub const Program = struct {
 test "string" {
     var program = try Program.init(std.testing.allocator);
     defer program.deinit();
-    var exp = Expression{ .int = .{
-        .token = .{ .int = "42" },
-        .value = 42,
-    } };
     try program.statements.append(.{
         .let = LetStatement{
             .token = .let,
@@ -139,7 +135,10 @@ test "string" {
                 .token = .{ .ident = "myVar" },
                 .value = "myVar",
             },
-            .value = &exp,
+            .value = &(Expression{ .int = .{
+                .token = .{ .int = "42" },
+                .value = 42,
+            } }),
         },
     });
     try std.testing.expectFmt("let myVar = 42;\n", "{}", .{program});

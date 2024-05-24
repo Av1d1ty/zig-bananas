@@ -37,14 +37,14 @@ const Parser = struct {
     curr_token: Token = Token.illegal,
     peek_token: Token = Token.illegal,
 
-    expression_pointers: std.ArrayList(*ast.Expression),
+    expression_pointers: std.ArrayList(*const ast.Expression),
 
     pub fn init(lexer: *Lexer, allocator: std.mem.Allocator) @This() {
         var p = Parser{
             .lexer = lexer,
             .allocator = allocator,
             .errors = std.ArrayList(anyerror).init(allocator),
-            .expression_pointers = std.ArrayList(*ast.Expression).init(allocator),
+            .expression_pointers = std.ArrayList(*const ast.Expression).init(allocator),
         };
         p.next_token();
         p.next_token();
@@ -132,7 +132,7 @@ const Parser = struct {
         return ast.ExpressionStatement{ .expression = expression };
     }
 
-    fn parse_expression(self: *@This(), precedence: Precedence) !*ast.Expression {
+    fn parse_expression(self: *@This(), precedence: Precedence) !*const ast.Expression {
         var left_exp = try self.parse_prefix_expr();
         // NOTE: no need to check for `;`, because it has the lowest precendece
         // and the loop will break anyway
@@ -143,7 +143,7 @@ const Parser = struct {
         return left_exp;
     }
 
-    fn parse_prefix_expr(self: *@This()) ParserError!*ast.Expression {
+    fn parse_prefix_expr(self: *@This()) ParserError!*const ast.Expression {
         const token = self.curr_token;
         const exp_ptr = try self.allocator.create(ast.Expression);
         exp_ptr.* = switch (token) {
@@ -169,7 +169,7 @@ const Parser = struct {
         return exp_ptr;
     }
 
-    fn parse_infix_expr(self: *@This(), left: *ast.Expression) ParserError!*ast.Expression {
+    fn parse_infix_expr(self: *@This(), left: *const ast.Expression) ParserError!*const ast.Expression {
         const token = self.curr_token;
         self.next_token();
         const exp_ptr = try self.allocator.create(ast.Expression);
