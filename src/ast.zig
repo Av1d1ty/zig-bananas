@@ -15,13 +15,12 @@ pub const Statement = union(enum) {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
-            // TODO: print expression value
             .let => |let| writer.print("{s} {s} = {};\n", .{
-                @tagName(let.token),
+                "let",
                 let.name.value,
                 let.value,
             }),
-            .ret => |ret| writer.print("{s} {?};\n", .{ @tagName(ret.token), ret.value }),
+            .ret => |ret| writer.print("{s} {?};\n", .{ "return", ret.value }),
             .exp => |exp| writer.print("{};\n", .{exp.expression}),
         };
     }

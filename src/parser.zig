@@ -83,7 +83,8 @@ const Parser = struct {
     fn parse_statement(self: *@This()) !ast.Statement {
         return switch (self.curr_token) {
             .let => .{ .let = try self.parse_let_statement() },
-            .return_token => .{ .ret = self.parse_return_statement() },
+            .return_token => .{ .ret = try self.parse_return_statement() },
+            // TODO: specify precisely what tokens may identify start of a statement
             else => .{ .exp = try self.parse_expression_statement() },
         };
     }
@@ -110,10 +111,18 @@ const Parser = struct {
         return ast.LetStatement{ .token = token, .name = ident, .value = exp };
     }
 
-    fn parse_return_statement(self: *@This()) ast.ReturnStatement {
+    fn parse_return_statement(self: *@This()) !ast.ReturnStatement {
         const token = self.curr_token;
-        while (self.curr_token != Token.semicolon) : (self.next_token()) {}
-        return ast.ReturnStatement{ .token = token, .value = null };
+        if (self.peek_token == .semicolon) {
+            self.next_token();
+            return ast.ReturnStatement{ .token = token, .value = null };
+        }
+        self.next_token();
+        const exp = try self.parse_expression(Precedence.lowest);
+        if (self.peek_token == .semicolon) {
+            self.next_token();
+        }
+        return ast.ReturnStatement{ .token = token, .value = exp };
     }
 
     fn parse_expression_statement(self: *@This()) !ast.ExpressionStatement {
@@ -191,6 +200,7 @@ test "let_statements" {
         .{ .ident = "y", .value = "(1 + b)" },
         .{ .ident = "foobar", .value = "(x / y)" },
     };
+
     var lexer = Lexer.init(input);
     var parser = Parser.init(&lexer, std.testing.allocator);
     var program = try parser.parse_program();
@@ -218,9 +228,11 @@ test "let_statements" {
 test "return_statements" {
     const input =
         \\ return 5;
-        \\ return 10;
-        \\ return 4242;
+        \\ return 1 + b;
+        \\ return;
     ;
+    const expected = [_][]const u8{ "5", "(1 + b)", "null" };
+
     var lexer = Lexer.init(input);
     var parser = Parser.init(&lexer, std.testing.allocator);
     var program = try parser.parse_program();
@@ -233,8 +245,13 @@ test "return_statements" {
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
 
-    for (program.statements.items) |statement| {
-        try expect(statement.ret.token == Token.return_token);
+    for (program.statements.items, expected) |statement, case| {
+        switch (statement) {
+            .ret => |val| {
+                try std.testing.expectFmt(case, "{?}", .{val.value});
+            },
+            else => return error.UnexpectedToken,
+        }
     }
 }
 
