@@ -94,7 +94,10 @@ const Parser = struct {
             .ident => self.next_token(),
             else => return error.NextTokenNotIdent,
         }
-        const ident = ast.Identifier{ .token = self.curr_token };
+        const ident = ast.Identifier{
+            .token = self.curr_token,
+            .value = self.curr_token.get_value().?,
+        };
         while (self.curr_token != Token.semicolon) : (self.next_token()) {}
         return ast.LetStatement{ .token = token, .name = ident };
     }
@@ -127,7 +130,10 @@ const Parser = struct {
         const token = self.curr_token;
         const exp_ptr = try self.allocator.create(ast.Expression);
         exp_ptr.* = switch (token) {
-            .ident => ast.Expression{ .ident = ast.Identifier{ .token = self.curr_token } },
+            .ident => ast.Expression{ .ident = ast.Identifier{
+                .token = self.curr_token,
+                .value = self.curr_token.get_value().?,
+            } },
             .int => ast.Expression{ .int = ast.Integer{
                 .token = self.curr_token,
                 .value = try std.fmt.parseInt(i64, self.curr_token.get_value().?, 10),
@@ -185,7 +191,8 @@ test "let_statements" {
     for (program.statements.items, expected_identifiers) |statement, ident| {
         switch (statement) {
             .let => |val| {
-                try expect(std.mem.eql(u8, val.name.token.get_value().?, ident));
+                try std.testing.expectEqualStrings(ident, val.name.value);
+                try std.testing.expectEqualStrings(ident, val.name.token.get_value().?);
             },
             else => unreachable,
         }

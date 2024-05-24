@@ -16,10 +16,7 @@ pub const Statement = union(enum) {
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
             // TODO: print expression value
-            .let => |let| writer.print("{s} {s} = ;\n", .{
-                @tagName(let.token),
-                let.name.token.get_value().?,
-            }),
+            .let => |let| writer.print("{s} {s} = ;\n", .{ @tagName(let.token), let.name.value }),
             .ret => |ret| writer.print("{s} {?};\n", .{ @tagName(ret.token), ret.value }),
             .exp => |exp| writer.print("{};\n", .{exp.expression}),
         };
@@ -41,7 +38,7 @@ pub const Expression = union(enum) {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
-            .ident => |ident| writer.print("{s}", .{ident.token.get_value().?}),
+            .ident => |ident| writer.print("{s}", .{ident.value}),
             .int => |int| writer.print("{d}", .{int.value}),
             .pref => |pref| writer.print("({s}{})", .{ pref.token.get_string(), pref.right }),
             .inf => |inf| writer.print("({} {s} {})", .{
@@ -57,21 +54,22 @@ pub const LetStatement = struct {
     token: Token,
     name: Identifier,
     // TODO: parse
-    // value: Expression,
+    // value: *Expression,
 };
 
 pub const ReturnStatement = struct {
     token: Token,
-    value: ?Expression,
+    value: ?Expression, // TODO: pointer?
 };
 
 pub const ExpressionStatement = struct {
-    // token: Token, // NOTE: needed because it may contain identifiers?
+    // token: Token,
     expression: *Expression,
 };
 
 pub const Identifier = struct {
     token: Token,
+    value: []const u8, // NOTE: not really needed, but makes code prettier
 };
 
 pub const Integer = struct {
@@ -80,7 +78,7 @@ pub const Integer = struct {
 };
 
 pub const Prefix = struct {
-    token: Token, // The prefix token, e.g. !
+    token: Token, // The prefix token, e.g. `!`
     right: *Expression,
 };
 
@@ -137,6 +135,7 @@ test "string" {
             .token = .let,
             .name = Identifier{
                 .token = .{ .ident = "myVar" },
+                .value = "myVar",
             },
         },
     });
