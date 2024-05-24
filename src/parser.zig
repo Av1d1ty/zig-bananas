@@ -92,14 +92,22 @@ const Parser = struct {
         const token = self.curr_token;
         switch (self.peek_token) {
             .ident => self.next_token(),
-            else => return error.NextTokenNotIdent,
+            else => return error.UnexpectedToken,
         }
         const ident = ast.Identifier{
             .token = self.curr_token,
             .value = self.curr_token.get_value().?,
         };
-        while (self.curr_token != Token.semicolon) : (self.next_token()) {}
-        return ast.LetStatement{ .token = token, .name = ident };
+        self.next_token();
+        if (self.curr_token != .assign) {
+            return error.UnexpectedToken;
+        }
+        self.next_token();
+        const exp = try self.parse_expression(Precedence.lowest);
+        if (self.peek_token == .semicolon) {
+            self.next_token();
+        }
+        return ast.LetStatement{ .token = token, .name = ident, .value = exp };
     }
 
     fn parse_return_statement(self: *@This()) ast.ReturnStatement {
@@ -172,9 +180,17 @@ const expect = std.testing.expect;
 test "let_statements" {
     const input =
         \\ let x = 5;
-        \\ let y = 10;
-        \\ let foobar = 838383;
+        \\ let y = 1 + b;
+        \\ let foobar = x / y;
     ;
+    const expected = [_]struct {
+        ident: []const u8,
+        value: []const u8,
+    }{
+        .{ .ident = "x", .value = "5" },
+        .{ .ident = "y", .value = "(1 + b)" },
+        .{ .ident = "foobar", .value = "(x / y)" },
+    };
     var lexer = Lexer.init(input);
     var parser = Parser.init(&lexer, std.testing.allocator);
     var program = try parser.parse_program();
@@ -187,14 +203,14 @@ test "let_statements" {
 
     std.debug.print("\n{}", .{program});
 
-    const expected_identifiers = [_][]const u8{ "x", "y", "foobar" };
-    for (program.statements.items, expected_identifiers) |statement, ident| {
+    for (program.statements.items, expected) |statement, case| {
         switch (statement) {
             .let => |val| {
-                try std.testing.expectEqualStrings(ident, val.name.value);
-                try std.testing.expectEqualStrings(ident, val.name.token.get_value().?);
+                try std.testing.expectEqualStrings(case.ident, val.name.value);
+                try std.testing.expectEqualStrings(case.ident, val.name.token.get_value().?);
+                try std.testing.expectFmt(case.value, "{}", .{val.value});
             },
-            else => unreachable,
+            else => return error.UnexpectedToken,
         }
     }
 }
