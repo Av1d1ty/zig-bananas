@@ -15,11 +15,7 @@ pub const Statement = union(enum) {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
-            .let => |let| writer.print("{s} {s} = {};\n", .{
-                "let",
-                let.name.value,
-                let.value,
-            }),
+            .let => |let| writer.print("{s} {s} = {};\n", .{ "let", let.name.value, let.value }),
             .ret => |ret| writer.print("{s} {?};\n", .{ "return", ret.value }),
             .exp => |exp| writer.print("{};\n", .{exp.expression}),
         };
@@ -129,22 +125,22 @@ pub const Program = struct {
     }
 };
 
-// test "string" {
-//     var program = try Program.init(std.testing.allocator);
-//     defer program.deinit();
-//     try program.statements.append(.{
-//         .let = LetStatement{
-//             .token = .let,
-//             .name = Identifier{
-//                 .token = .{ .ident = "myVar" },
-//                 .value = "myVar",
-//             },
-//             .value = Expression{ .inf = Infix{
-//                 .token = .plus,
-//                 .left = Expression{ .int = Integer{ .token = .{ .int = "1" }, .value = 1 } },
-//                 .right = Expression{ .ident = Identifier{ .token = .{ .ident = "b" }, .value = "b" } },
-//             } },
-//         },
-//     });
-//     try std.testing.expectFmt("let myVar = 1 + b;\n", "{}", .{program});
-// }
+test "string" {
+    var program = try Program.init(std.testing.allocator);
+    defer program.deinit();
+    var exp = Expression{ .int = .{
+        .token = .{ .int = "42" },
+        .value = 42,
+    } };
+    try program.statements.append(.{
+        .let = LetStatement{
+            .token = .let,
+            .name = Identifier{
+                .token = .{ .ident = "myVar" },
+                .value = "myVar",
+            },
+            .value = &exp,
+        },
+    });
+    try std.testing.expectFmt("let myVar = 42;\n", "{}", .{program});
+}
