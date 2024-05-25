@@ -25,6 +25,7 @@ pub const Statement = union(enum) {
 pub const Expression = union(enum) {
     ident: Identifier,
     int: Integer,
+    bool: Boolean,
     pref: Prefix,
     inf: Infix,
 
@@ -39,6 +40,7 @@ pub const Expression = union(enum) {
         return switch (self) {
             .ident => |ident| writer.print("{s}", .{ident.value}),
             .int => |int| writer.print("{d}", .{int.value}),
+            .bool => |boolean| writer.print("{}", .{boolean.value}),
             .pref => |pref| writer.print("({s}{})", .{ pref.token.get_string(), pref.right }),
             .inf => |inf| writer.print("({} {s} {})", .{
                 inf.left,
@@ -73,6 +75,11 @@ pub const Identifier = struct {
 pub const Integer = struct {
     token: Token,
     value: i64,
+};
+
+pub const Boolean = struct {
+    token: Token,
+    value: bool,
 };
 
 pub const Prefix = struct {

@@ -181,6 +181,10 @@ const Parser = struct {
                 .token = self.curr_token,
                 .value = try std.fmt.parseInt(i64, self.curr_token.get_value().?, 10),
             } },
+            .true_token, .false_token => ast.Expression{ .bool = ast.Boolean{
+                .token = self.curr_token,
+                .value = if (token == .true_token) true else false,
+            } },
             .minus, .bang => blk: {
                 const tok = self.curr_token;
                 self.next_token();
@@ -189,7 +193,7 @@ const Parser = struct {
                     .right = try self.parse_expression(Precedence.prefix),
                 } };
             },
-            else => unreachable,
+            else => return error.UnexpectedToken,
         };
         try self.expression_pointers.append(exp_ptr);
         return exp_ptr;
@@ -351,6 +355,40 @@ test "integers" {
     }
 }
 
+test "booleans" {
+    const input =
+        \\ true;
+        \\ false;
+    ;
+    const cases = [_]bool{ true, false };
+
+    var lexer = Lexer.init(input);
+    var parser = Parser.init(&lexer, std.testing.allocator);
+    var program = try parser.parse_program();
+
+    defer parser.deinit();
+    defer program.deinit();
+
+    try expect(program.statements.items.len == cases.len);
+    try expect(parser.errors.items.len == 0);
+
+    // std.debug.print("\n{}", .{program});
+
+    for (program.statements.items, cases) |statement, expected| {
+        switch (statement) {
+            .exp => |exp| {
+                switch (exp.expression.*) {
+                    .bool => |boolean| {
+                        try expect(boolean.token == .true_token or boolean.token == .false_token);
+                        try expect(expected == boolean.value);
+                    },
+                    else => return error.UnexpectedToken,
+                }
+            },
+            else => return error.UnexpectedToken,
+        }
+    }
+}
 test "prefix" {
     const input =
         \\ !5;
@@ -454,6 +492,8 @@ test "precedence" {
         \\5 > 4 == 3 < 4
         \\5 < 4 != 3 > 4
         \\3 + 4 * 5 == 3 * 1 + 4 * 5
+        \\foobar == true
+        \\baz != false
     ;
     const expected =
         \\((-a) * b);
@@ -469,6 +509,8 @@ test "precedence" {
         \\((5 > 4) == (3 < 4));
         \\((5 < 4) != (3 > 4));
         \\((3 + (4 * 5)) == ((3 * 1) + (4 * 5)));
+        \\(foobar == true);
+        \\(baz != false);
         \\
     ;
 
