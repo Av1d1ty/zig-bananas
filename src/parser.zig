@@ -84,8 +84,33 @@ const Parser = struct {
         return switch (self.curr_token) {
             .let => .{ .let = try self.parse_let_statement() },
             .return_token => .{ .ret = try self.parse_return_statement() },
-            // TODO: specify precisely what tokens may identify start of a statement
-            else => .{ .exp = try self.parse_expression_statement() },
+            .ident,
+            .int,
+            .minus,
+            .bang,
+            .lparen,
+            .rparen,
+            .lbrace,
+            .rbrace,
+            .function,
+            .if_token,
+            .true_token,
+            .false_token,
+            => .{ .exp = try self.parse_expression_statement() },
+            .illegal,
+            .eof,
+            .assign,
+            .plus,
+            .asterisk,
+            .slash,
+            .lt,
+            .gt,
+            .eq,
+            .not_eq,
+            .comma,
+            .semicolon,
+            .else_token,
+            => error.UnexpectedToken,
         };
     }
 
@@ -211,7 +236,7 @@ test "let_statements" {
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
 
-    std.debug.print("\n{}", .{program});
+    // std.debug.print("\n{}", .{program});
 
     for (program.statements.items, expected) |statement, case| {
         switch (statement) {
@@ -240,7 +265,7 @@ test "return_statements" {
     defer parser.deinit();
     defer program.deinit();
 
-    std.debug.print("\n{}", .{program});
+    // std.debug.print("\n{}", .{program});
 
     try expect(program.statements.items.len == 3);
     try expect(parser.errors.items.len == 0);
@@ -305,7 +330,7 @@ test "prefix" {
         defer parser.deinit();
         defer program.deinit();
 
-        std.debug.print("\n{}", .{program});
+        // std.debug.print("\n{}", .{program});
 
         try expect(program.statements.items.len == 1);
         try expect(parser.errors.items.len == 0);

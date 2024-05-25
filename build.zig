@@ -66,13 +66,20 @@ pub fn build(b: *std.Build) void {
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
-    const lib_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/root.zig" },
+    const parser_unit_tests = b.addTest(.{
+        .root_source_file = .{ .path = "src/parser.zig" },
         .target = target,
         .optimize = optimize,
     });
 
-    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
+    const ast_unit_tests = b.addTest(.{
+        .root_source_file = .{ .path = "src/ast.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const run_parser_unit_tests = b.addRunArtifact(parser_unit_tests);
+    const run_ast_unit_tests = b.addRunArtifact(ast_unit_tests);
 
     const exe_unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/main.zig" },
@@ -86,6 +93,7 @@ pub fn build(b: *std.Build) void {
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_lib_unit_tests.step);
+    test_step.dependOn(&run_parser_unit_tests.step);
+    test_step.dependOn(&run_ast_unit_tests.step);
     test_step.dependOn(&run_exe_unit_tests.step);
 }
