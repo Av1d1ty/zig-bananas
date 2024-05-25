@@ -90,9 +90,7 @@ const Parser = struct {
             .minus,
             .bang,
             .lparen,
-            .rparen,
             .lbrace,
-            .rbrace,
             .function,
             .if_token,
             .true_token,
@@ -104,6 +102,8 @@ const Parser = struct {
             .plus,
             .asterisk,
             .slash,
+            .rparen,
+            .rbrace,
             .lt,
             .gt,
             .eq,
@@ -172,6 +172,7 @@ const Parser = struct {
     fn parse_prefix_expr(self: *@This()) ParserError!*const ast.Expression {
         const token = self.curr_token;
         const exp_ptr = try self.allocator.create(ast.Expression);
+        errdefer self.allocator.destroy(exp_ptr);
         exp_ptr.* = switch (token) {
             .ident => ast.Expression{ .ident = ast.Identifier{
                 .token = self.curr_token,
@@ -193,6 +194,15 @@ const Parser = struct {
                     .right = try self.parse_expression(Precedence.prefix),
                 } };
             },
+            .lparen => blk: {
+                self.next_token();
+                const exp = try self.parse_expression(Precedence.lowest);
+                if (self.peek_token != .rparen) {
+                    return error.UnexpectedToken;
+                }
+                self.next_token();
+                break :blk exp.*;
+            },
             else => return error.UnexpectedToken,
         };
         try self.expression_pointers.append(exp_ptr);
@@ -203,6 +213,7 @@ const Parser = struct {
         const token = self.curr_token;
         self.next_token();
         const exp_ptr = try self.allocator.create(ast.Expression);
+        errdefer self.allocator.destroy(exp_ptr);
         exp_ptr.* = ast.Expression{
             .inf = ast.Infix{
                 .token = token,
@@ -496,6 +507,11 @@ test "precedence" {
         \\3 + 4 * 5 == 3 * 1 + 4 * 5
         \\foobar == true
         \\baz != false
+        \\1 + (2 + 3) + 4
+        \\(5 + 5) * 2
+        \\2 / (5 + 5);
+        \\-(5 + 5)
+        \\!(true == true)
     ;
     const expected =
         \\((-a) * b);
@@ -513,6 +529,11 @@ test "precedence" {
         \\((3 + (4 * 5)) == ((3 * 1) + (4 * 5)));
         \\(foobar == true);
         \\(baz != false);
+        \\((1 + (2 + 3)) + 4);
+        \\((5 + 5) * 2);
+        \\(2 / (5 + 5));
+        \\(-(5 + 5));
+        \\(!(true == true));
         \\
     ;
 
