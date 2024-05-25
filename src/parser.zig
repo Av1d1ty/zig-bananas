@@ -419,6 +419,8 @@ test "prefix" {
                     .bang => try expect(expected.token == .bang),
                     else => return error.UnexpectedToken,
                 }
+                try expect(pref.right.* == .int);
+                try expect(pref.right.int.value == expected.integer);
             },
             else => return error.UnexpectedToken,
         }
