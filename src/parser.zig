@@ -27,6 +27,7 @@ const ParserError = error{
     OutOfMemory,
     Overflow,
     InvalidCharacter,
+    UnexpectedToken,
 };
 
 const Parser = struct {
@@ -217,7 +218,7 @@ test "let_statements" {
         \\ let y = 1 + b;
         \\ let foobar = x / y;
     ;
-    const expected = [_]struct {
+    const cases = [_]struct {
         ident: []const u8,
         value: []const u8,
     }{
@@ -233,17 +234,17 @@ test "let_statements" {
     defer parser.deinit();
     defer program.deinit();
 
-    try expect(program.statements.items.len == 3);
+    try expect(program.statements.items.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
     // std.debug.print("\n{}", .{program});
 
-    for (program.statements.items, expected) |statement, case| {
+    for (program.statements.items, cases) |statement, expected| {
         switch (statement) {
             .let => |val| {
-                try std.testing.expectEqualStrings(case.ident, val.name.value);
-                try std.testing.expectEqualStrings(case.ident, val.name.token.get_value().?);
-                try std.testing.expectFmt(case.value, "{}", .{val.value});
+                try std.testing.expectEqualStrings(expected.ident, val.name.value);
+                try std.testing.expectEqualStrings(expected.ident, val.name.token.get_value().?);
+                try std.testing.expectFmt(expected.value, "{}", .{val.value});
             },
             else => return error.UnexpectedToken,
         }
@@ -256,7 +257,7 @@ test "return_statements" {
         \\ return 1 + b;
         \\ return;
     ;
-    const expected = [_][]const u8{ "5", "(1 + b)", "null" };
+    const cases = [_][]const u8{ "5", "(1 + b)", "null" };
 
     var lexer = Lexer.init(input);
     var parser = Parser.init(&lexer, std.testing.allocator);
@@ -267,128 +268,174 @@ test "return_statements" {
 
     // std.debug.print("\n{}", .{program});
 
-    try expect(program.statements.items.len == 3);
+    try expect(program.statements.items.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
-    for (program.statements.items, expected) |statement, case| {
+    for (program.statements.items, cases) |statement, expected| {
         switch (statement) {
             .ret => |val| {
-                try std.testing.expectFmt(case, "{?}", .{val.value});
+                try std.testing.expectFmt(expected, "{?}", .{val.value});
             },
             else => return error.UnexpectedToken,
         }
     }
 }
 
-// TODO: tests almost nothing, needs further work
-// test "expressions" {
-//     const input =
-//         \\ foobar;
-//         \\ 5;
-//     ;
-//
-//     var lexer = Lexer.init(input);
-//     var parser = Parser.init(&lexer, std.testing.allocator);
-//     var program = try parser.parse_program();
-//
-//     defer parser.deinit();
-//     defer program.deinit();
-//
-//     try expect(program.statements.items.len == 2);
-//     try expect(parser.errors.items.len == 0);
-//
-//     std.debug.print("\n{}", .{program});
-//
-//     const expected_identifiers = [_][]const u8{ "foobar", "5" };
-//     // NOTE: integer literal values are not validated for now
-//     for (program.statements.items, expected_identifiers) |statement, ident| {
-//         switch (statement) {
-//             .exp => |val| {
-//                 try expect(std.mem.eql(u8, val.token.get_value().?, ident));
-//             },
-//             else => unreachable,
-//         }
-//     }
-// }
+test "identifiers" {
+    const input =
+        \\ foobar;
+        \\ baz;
+    ;
+    const cases = [_][]const u8{ "foobar", "baz" };
+
+    var lexer = Lexer.init(input);
+    var parser = Parser.init(&lexer, std.testing.allocator);
+    var program = try parser.parse_program();
+
+    defer parser.deinit();
+    defer program.deinit();
+
+    try expect(program.statements.items.len == cases.len);
+    try expect(parser.errors.items.len == 0);
+
+    // std.debug.print("\n{}", .{program});
+
+    for (program.statements.items, cases) |statement, expected| {
+        switch (statement) {
+            .exp => |exp| {
+                switch (exp.expression.*) {
+                    .ident => |ident| {
+                        try expect(ident.token == .ident);
+                        try std.testing.expectEqualStrings(expected, ident.value);
+                    },
+                    else => return error.UnexpectedToken,
+                }
+            },
+            else => return error.UnexpectedToken,
+        }
+    }
+}
+
+test "integers" {
+    const input =
+        \\ 5;
+        \\ 42;
+    ;
+    const cases = [_]u8{ 5, 42 };
+
+    var lexer = Lexer.init(input);
+    var parser = Parser.init(&lexer, std.testing.allocator);
+    var program = try parser.parse_program();
+
+    defer parser.deinit();
+    defer program.deinit();
+
+    try expect(program.statements.items.len == cases.len);
+    try expect(parser.errors.items.len == 0);
+
+    // std.debug.print("\n{}", .{program});
+
+    for (program.statements.items, cases) |statement, expected| {
+        switch (statement) {
+            .exp => |exp| {
+                switch (exp.expression.*) {
+                    .int => |int| {
+                        try expect(int.token == .int);
+                        try expect(expected == int.value);
+                    },
+                    else => return error.UnexpectedToken,
+                }
+            },
+            else => return error.UnexpectedToken,
+        }
+    }
+}
 
 test "prefix" {
-    const PrefixTestCase = struct {
-        input: []const u8,
-        operator: u8,
-        integer: i64,
+    const input =
+        \\ !5;
+        \\ -15;
+    ;
+    const cases = [_]struct { token: Token, integer: i64 }{
+        .{ .token = .bang, .integer = 5 },
+        .{ .token = .minus, .integer = 15 },
     };
-    const test_cases = [_]PrefixTestCase{
-        .{ .input = "!5;", .operator = '!', .integer = 5 },
-        .{ .input = "-15;", .operator = '-', .integer = 15 },
-    };
 
-    for (test_cases) |case| {
-        var lexer = Lexer.init(case.input);
-        var parser = Parser.init(&lexer, std.testing.allocator);
-        var program = try parser.parse_program();
+    var lexer = Lexer.init(input);
+    var parser = Parser.init(&lexer, std.testing.allocator);
+    var program = try parser.parse_program();
 
-        defer parser.deinit();
-        defer program.deinit();
+    defer parser.deinit();
+    defer program.deinit();
 
-        // std.debug.print("\n{}", .{program});
+    // std.debug.print("\n{}", .{program});
 
-        try expect(program.statements.items.len == 1);
-        try expect(parser.errors.items.len == 0);
+    try expect(program.statements.items.len == cases.len);
+    try expect(parser.errors.items.len == 0);
 
-        for (program.statements.items) |statement| {
-            switch (statement.exp.expression.*) {
-                .pref => |pref| {
-                    try expect(pref.right.int.value == case.integer);
-                    switch (pref.token) {
-                        .bang => try expect(case.operator == '!'),
-                        .minus => try expect(case.operator == '-'),
-                        else => unreachable,
-                    }
-                },
-                else => unreachable,
-            }
+    for (program.statements.items, cases) |statement, expected| {
+        switch (statement.exp.expression.*) {
+            .pref => |pref| {
+                switch (pref.token) {
+                    .minus => try expect(expected.token == .minus),
+                    .bang => try expect(expected.token == .bang),
+                    else => return error.UnexpectedToken,
+                }
+            },
+            else => return error.UnexpectedToken,
         }
     }
 }
 
 test "infix" {
-    const InfixTestCase = struct {
-        input: []const u8,
-        left_value: i64,
+    const input =
+        \\ 5 + 5;
+        \\ 5 - 5;
+        \\ 5 * 5;
+        \\ 5 / 5;
+        \\ 5 > 5;
+        \\ 5 < 5;
+        \\ 5 == 5;
+        \\ 5 != 5;
+    ;
+    const cases = [_]struct {
+        left: i64,
+        right: i64,
         operator: Token,
-        right_value: i64,
-    };
-    const test_cases = [_]InfixTestCase{
-        .{ .input = "5 + 5;", .left_value = 5, .operator = .plus, .right_value = 5 },
-        .{ .input = "5 - 5;", .left_value = 5, .operator = .minus, .right_value = 5 },
-        .{ .input = "5 * 5;", .left_value = 5, .operator = .asterisk, .right_value = 5 },
-        .{ .input = "5 / 5;", .left_value = 5, .operator = .slash, .right_value = 5 },
-        .{ .input = "5 > 5;", .left_value = 5, .operator = .gt, .right_value = 5 },
-        .{ .input = "5 < 5;", .left_value = 5, .operator = .lt, .right_value = 5 },
-        .{ .input = "5 == 5;", .left_value = 5, .operator = .eq, .right_value = 5 },
-        .{ .input = "5 != 5;", .left_value = 5, .operator = .not_eq, .right_value = 5 },
+    }{
+        .{ .left = 5, .right = 5, .operator = .plus },
+        .{ .left = 5, .right = 5, .operator = .minus },
+        .{ .left = 5, .right = 5, .operator = .asterisk },
+        .{ .left = 5, .right = 5, .operator = .slash },
+        .{ .left = 5, .right = 5, .operator = .gt },
+        .{ .left = 5, .right = 5, .operator = .lt },
+        .{ .left = 5, .right = 5, .operator = .eq },
+        .{ .left = 5, .right = 5, .operator = .not_eq },
     };
 
-    for (test_cases) |case| {
-        var lexer = Lexer.init(case.input);
-        var parser = Parser.init(&lexer, std.testing.allocator);
-        var program = try parser.parse_program();
+    var lexer = Lexer.init(input);
+    var parser = Parser.init(&lexer, std.testing.allocator);
+    var program = try parser.parse_program();
 
-        defer parser.deinit();
-        defer program.deinit();
+    defer parser.deinit();
+    defer program.deinit();
 
-        try expect(program.statements.items.len == 1);
-        try expect(parser.errors.items.len == 0);
+    try expect(program.statements.items.len == cases.len);
+    try expect(parser.errors.items.len == 0);
 
-        for (program.statements.items) |statement| {
-            switch (statement.exp.expression.*) {
-                .inf => |inf| {
-                    try expect(inf.left.int.value == case.left_value);
-                    try expect(inf.right.int.value == case.right_value);
-                    try expect(@intFromEnum(inf.token) == @intFromEnum(case.operator));
-                },
-                else => unreachable,
-            }
+    // std.debug.print("\n{}", .{program});
+
+    for (program.statements.items, cases) |statement, expected| {
+        switch (statement.exp.expression.*) {
+            .inf => |inf| {
+                if (inf.left.* != .int or inf.right.* != .int) {
+                    return error.UnexpectedToken;
+                }
+                try expect(inf.left.int.value == expected.left);
+                try expect(inf.right.int.value == expected.right);
+                try expect(@intFromEnum(inf.token) == @intFromEnum(expected.operator));
+            },
+            else => return error.UnexpectedToken,
         }
     }
 }
