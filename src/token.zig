@@ -58,9 +58,32 @@ pub const Token = union(enum) {
     }
 
     /// Get string representation of the given token
-    pub fn get_string(self: Token) []const u8 {
-        // TODO: complete switch
-        return switch (self) {
+    // pub fn get_string(self: Token) []const u8 {
+    //     return switch (self) {
+    //         .assign => "=",
+    //         .minus => "-",
+    //         .plus => "+",
+    //         .asterisk => "*",
+    //         .slash => "/",
+    //         .bang => "!",
+    //         .lt => "<",
+    //         .gt => ">",
+    //         .eq => "==",
+    //         .not_eq => "!=",
+    //         else => unreachable,
+    //     };
+    // }
+
+    pub fn format(
+        self: @This(),
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
+        const string = switch (self) {
+            // TODO: complete switch
             .assign => "=",
             .minus => "-",
             .plus => "+",
@@ -73,5 +96,6 @@ pub const Token = union(enum) {
             .not_eq => "!=",
             else => unreachable,
         };
+        return writer.print("{s}", .{string});
     }
 };

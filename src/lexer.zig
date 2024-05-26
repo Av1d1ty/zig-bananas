@@ -5,6 +5,8 @@ pub const Lexer = struct {
     input: []const u8,
     position: u32 = 0,
     read_position: u32 = 0,
+    row: u32 = 0,
+    col: u16 = 0,
     ch: u8 = 0,
 
     pub fn init(input: []const u8) Lexer {
@@ -65,6 +67,11 @@ pub const Lexer = struct {
 
     fn skip_whitespace(self: *Lexer) void {
         while (std.ascii.isWhitespace(self.ch)) {
+            self.col += 1;
+            if (self.ch == '\n') {
+                self.row += 1;
+                self.col = 0;
+            }
             self.read_char();
         }
     }
@@ -91,6 +98,18 @@ pub const Lexer = struct {
 
     fn is_digit(ch: u8) bool {
         return std.ascii.isDigit(ch);
+    }
+
+    pub fn get_line(self: *Lexer) []const u8 {
+        const start_idx = self.position - self.col - 2;
+        var end_idx: usize = 0;
+        for (self.input[self.position..], 0..) |char, offset| {
+            if (char == '\n') {
+                end_idx = self.position + offset;
+                break;
+            }
+        } else return self.input[start_idx..];
+        return self.input[start_idx..end_idx];
     }
 };
 

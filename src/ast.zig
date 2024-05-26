@@ -41,12 +41,8 @@ pub const Expression = union(enum) {
             .ident => |ident| writer.print("{s}", .{ident.value}),
             .int => |int| writer.print("{d}", .{int.value}),
             .bool => |boolean| writer.print("{}", .{boolean.value}),
-            .pref => |pref| writer.print("({s}{})", .{ pref.token.get_string(), pref.right }),
-            .inf => |inf| writer.print("({} {s} {})", .{
-                inf.left,
-                inf.token.get_string(),
-                inf.right,
-            }),
+            .pref => |pref| writer.print("({}{})", .{ pref.token, pref.right }),
+            .inf => |inf| writer.print("({} {} {})", .{ inf.left, inf.token, inf.right }),
         };
     }
 };

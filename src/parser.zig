@@ -27,13 +27,37 @@ const ParserError = error{
     OutOfMemory,
     Overflow,
     InvalidCharacter,
+
     UnexpectedToken,
+};
+
+const ErrorInfo = struct {
+    err: ParserError,
+    line: []const u8,
+    row: u32,
+    col: u16,
+    token: Token,
+
+    pub fn format(
+        self: @This(),
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
+        // TODO: prettify
+        return writer.print(
+            "{}: row {d}, col {d}, token '{}'\n\ton line '{s}'.\n",
+            .{ self.err, self.row, self.col, self.token, self.line },
+        );
+    }
 };
 
 const Parser = struct {
     lexer: *Lexer,
     allocator: std.mem.Allocator,
-    errors: std.ArrayList(anyerror),
+    errors: std.ArrayList(ErrorInfo),
 
     curr_token: Token = Token.illegal,
     peek_token: Token = Token.illegal,
@@ -44,7 +68,7 @@ const Parser = struct {
         var p = Parser{
             .lexer = lexer,
             .allocator = allocator,
-            .errors = std.ArrayList(anyerror).init(allocator),
+            .errors = std.ArrayList(ErrorInfo).init(allocator),
             .expression_pointers = std.ArrayList(*const ast.Expression).init(allocator),
         };
         p.next_token();
@@ -58,21 +82,31 @@ const Parser = struct {
     }
 
     pub fn print_errors(self: *@This()) void {
-        for (self.errors.items) |val| {
-            std.log.err("{s}\n", .{@errorName(val)});
+        std.log.err("\n\nParser encountered the following errors:", .{});
+        for (self.errors.items) |err| {
+            std.log.err("{}\n", .{err});
         }
     }
 
     pub fn parse_program(self: *@This()) !*ast.Program {
         var program = try ast.Program.init(self.allocator);
         while (self.curr_token != Token.eof) : (self.next_token()) {
-            const statement = self.parse_statement() catch |e| {
-                try self.errors.append(e);
+            const statement = self.parse_statement() catch |err| {
+                try self.errors.append(ErrorInfo{
+                    .err = err,
+                    .line = self.lexer.get_line(),
+                    .token = self.curr_token,
+                    .row = self.lexer.row,
+                    .col = self.lexer.col,
+                });
                 continue;
             };
             try program.statements.append(statement);
         }
         program.expression_pointers = try self.expression_pointers.clone();
+        if (self.errors.items.len > 0) {
+            self.print_errors();
+        }
         return program;
     }
 
@@ -511,7 +545,7 @@ test "precedence" {
         \\(5 + 5) * 2
         \\2 / (5 + 5);
         \\-(5 + 5)
-        \\!(true == true)
+        \\=!(true == true)
     ;
     const expected =
         \\((-a) * b);
