@@ -1,13 +1,22 @@
 const std = @import("std");
 const Token = @import("token.zig").Token;
 
+const LexerSnapshot = struct {
+    pos: u32,
+    row: u32,
+    col: u16,
+    tok: Token,
+};
+
 pub const Lexer = struct {
     input: []const u8,
     position: u32 = 0,
     read_position: u32 = 0,
-    row: u32 = 0,
+    row: u32 = 1,
+    // FIX: there is probably an off by one error somewhere with columns
     col: u16 = 0,
     ch: u8 = 0,
+    snapshot: LexerSnapshot = .{ .pos = 0, .row = 1, .col = 0, .tok = .illegal },
 
     pub fn init(input: []const u8) Lexer {
         var l = Lexer{ .input = input };
@@ -19,10 +28,15 @@ pub const Lexer = struct {
         self.ch = if (self.read_position >= self.input.len) 0 else self.input[self.read_position];
         self.position = self.read_position;
         self.read_position += 1;
+        self.col += 1;
     }
 
     fn peek_char(self: *Lexer) u8 {
         return if (self.read_position >= self.input.len) 0 else self.input[self.read_position];
+    }
+
+    pub fn take_snapshot(self: *Lexer) void {
+        self.snapshot = .{ .pos = self.position, .row = self.row, .col = self.col, .tok = .illegal };
     }
 
     pub fn next_token(self: *Lexer) Token {
@@ -67,7 +81,6 @@ pub const Lexer = struct {
 
     fn skip_whitespace(self: *Lexer) void {
         while (std.ascii.isWhitespace(self.ch)) {
-            self.col += 1;
             if (self.ch == '\n') {
                 self.row += 1;
                 self.col = 0;
@@ -101,15 +114,22 @@ pub const Lexer = struct {
     }
 
     pub fn get_line(self: *Lexer) []const u8 {
-        const start_idx = self.position - self.col - 2;
+        const start_idx = self.snapshot.pos - self.snapshot.col + 1;
         var end_idx: usize = 0;
-        for (self.input[self.position..], 0..) |char, offset| {
+        for (self.input[self.snapshot.pos..], 0..) |char, offset| {
             if (char == '\n') {
-                end_idx = self.position + offset;
+                end_idx = self.snapshot.pos + offset;
                 break;
             }
         } else return self.input[start_idx..];
         return self.input[start_idx..end_idx];
+    }
+
+    pub fn skip_line(self: *Lexer) void {
+        while (self.ch != '\n') {
+            self.read_char();
+        }
+        self.skip_whitespace();
     }
 };
 

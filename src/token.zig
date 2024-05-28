@@ -84,6 +84,8 @@ pub const Token = union(enum) {
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         const string = switch (self) {
             // TODO: complete switch
+            .int => |int| int,
+            .ident => |ident| ident,
             .assign => "=",
             .minus => "-",
             .plus => "+",
@@ -94,7 +96,7 @@ pub const Token = union(enum) {
             .gt => ">",
             .eq => "==",
             .not_eq => "!=",
-            else => unreachable,
+            else => "??",
         };
         return writer.print("{s}", .{string});
     }
