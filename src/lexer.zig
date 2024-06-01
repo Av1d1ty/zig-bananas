@@ -1,11 +1,16 @@
 const std = @import("std");
 const Token = @import("token.zig").Token;
 
-const LexerSnapshot = struct {
-    pos: u32,
-    row: u32,
-    col: u16,
-    tok: Token,
+const StateSnapshot = struct {
+    pos: u32 = 0,
+    row: u32 = 1,
+    col: u16 = 1,
+    tok: Token = .illegal,
+};
+
+const SnapshotFrame = struct {
+    curr_token: StateSnapshot = StateSnapshot{},
+    next_token: StateSnapshot = StateSnapshot{},
 };
 
 pub const Lexer = struct {
@@ -13,10 +18,9 @@ pub const Lexer = struct {
     position: u32 = 0,
     read_position: u32 = 0,
     row: u32 = 1,
-    // FIX: there is probably an off by one error somewhere with columns
     col: u16 = 0,
     ch: u8 = 0,
-    snapshot: LexerSnapshot = .{ .pos = 0, .row = 1, .col = 0, .tok = .illegal },
+    snapshot_frame: SnapshotFrame = SnapshotFrame{},
 
     pub fn init(input: []const u8) Lexer {
         var l = Lexer{ .input = input };
@@ -36,11 +40,18 @@ pub const Lexer = struct {
     }
 
     pub fn take_snapshot(self: *Lexer) void {
-        self.snapshot = .{ .pos = self.position, .row = self.row, .col = self.col, .tok = .illegal };
+        self.snapshot_frame.curr_token = self.snapshot_frame.next_token;
+        self.snapshot_frame.next_token = .{
+            .pos = self.position,
+            .row = self.row,
+            .col = self.col,
+            .tok = .illegal,
+        };
     }
 
     pub fn next_token(self: *Lexer) Token {
         self.skip_whitespace();
+        self.take_snapshot();
         const token: Token = switch (self.ch) {
             '=' => blk: {
                 if (self.peek_char() == '=') {
@@ -75,6 +86,7 @@ pub const Lexer = struct {
             '0'...'9' => return .{ .int = self.read_int() },
             else => .illegal,
         };
+        self.snapshot_frame.next_token.tok = token; // HACK:
         self.read_char();
         return token;
     }
@@ -114,11 +126,11 @@ pub const Lexer = struct {
     }
 
     pub fn get_line(self: *Lexer) []const u8 {
-        const start_idx = self.snapshot.pos - self.snapshot.col + 1;
+        const start_idx = self.snapshot_frame.curr_token.pos + 1 - self.snapshot_frame.curr_token.col;
         var end_idx: usize = 0;
-        for (self.input[self.snapshot.pos..], 0..) |char, offset| {
+        for (self.input[self.snapshot_frame.curr_token.pos..], 0..) |char, offset| {
             if (char == '\n') {
-                end_idx = self.snapshot.pos + offset;
+                end_idx = self.snapshot_frame.curr_token.pos + offset;
                 break;
             }
         } else return self.input[start_idx..];

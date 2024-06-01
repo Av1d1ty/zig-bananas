@@ -95,9 +95,9 @@ const Parser = struct {
                 try self.errors.append(ErrorInfo{
                     .err = err,
                     .line = self.lexer.get_line(),
-                    .token = self.lexer.snapshot.tok,
-                    .row = self.lexer.snapshot.row,
-                    .col = self.lexer.snapshot.col,
+                    .token = self.lexer.snapshot_frame.curr_token.tok,
+                    .row = self.lexer.snapshot_frame.curr_token.row,
+                    .col = self.lexer.snapshot_frame.curr_token.col,
                 });
                 self.lexer.skip_line();
                 continue;
@@ -112,11 +112,8 @@ const Parser = struct {
     }
 
     fn next_token(self: *@This()) void {
-        self.lexer.take_snapshot();
         self.curr_token = self.peek_token;
         self.peek_token = self.lexer.next_token();
-        // FIX: booo!
-        self.lexer.snapshot.tok = self.peek_token;
     }
 
     fn parse_statement(self: *@This()) !ast.Statement {
@@ -548,7 +545,7 @@ test "precedence" {
         \\1 + (2 + 3) + 4
         \\(5 + 5) * 2
         \\2 / (5 + 5);
-        \\)-(5 + 5)
+        \\-(5 + 5)
         \\!(true == true)
     ;
     const expected =
