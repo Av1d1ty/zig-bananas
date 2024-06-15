@@ -5,6 +5,7 @@ pub const Statement = union(enum) {
     let: LetStatement,
     ret: ReturnStatement,
     exp: ExpressionStatement,
+    blk: BlockStatement,
 
     pub fn format(
         self: @This(),
@@ -18,6 +19,7 @@ pub const Statement = union(enum) {
             .let => |let| writer.print("{s} {s} = {};\n", .{ "let", let.name.value, let.value }),
             .ret => |ret| writer.print("{s} {?};\n", .{ "return", ret.value }),
             .exp => |exp| writer.print("{};\n", .{exp.expression}),
+            .blk => |blk| for (blk.statements.items) |st| try writer.print("{}", .{st}),
         };
     }
 };
@@ -28,6 +30,7 @@ pub const Expression = union(enum) {
     bool: Boolean,
     pref: Prefix,
     inf: Infix,
+    if_exp: If,
 
     pub fn format(
         self: @This(),
@@ -43,6 +46,11 @@ pub const Expression = union(enum) {
             .bool => |boolean| writer.print("{}", .{boolean.value}),
             .pref => |pref| writer.print("({}{})", .{ pref.token, pref.right }),
             .inf => |inf| writer.print("({} {} {})", .{ inf.left, inf.token, inf.right }),
+            .if_exp => |if_exp| writer.print("if ({}) {{ {} }} else {{ {?} }}", .{
+                if_exp.condition,
+                if_exp.consequence,
+                if_exp.alternative,
+            }),
         };
     }
 };
@@ -87,6 +95,18 @@ pub const Infix = struct {
     token: Token,
     left: *const Expression,
     right: *const Expression,
+};
+
+pub const If = struct {
+    token: Token,
+    condition: *const Expression,
+    consequence: *const BlockStatement,
+    alternative: ?*const BlockStatement,
+};
+
+pub const BlockStatement = struct {
+    token: Token,
+    statements: std.ArrayList(Statement),
 };
 
 pub const Program = struct {

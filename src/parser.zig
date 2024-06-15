@@ -63,6 +63,7 @@ const Parser = struct {
     peek_token: Token = Token.illegal,
 
     expression_pointers: std.ArrayList(*const ast.Expression),
+    statement_pointers: std.ArrayList(*const ast.Statement),
 
     pub fn init(lexer: *Lexer, allocator: std.mem.Allocator) @This() {
         var p = Parser{
@@ -70,6 +71,7 @@ const Parser = struct {
             .allocator = allocator,
             .errors = std.ArrayList(ErrorInfo).init(allocator),
             .expression_pointers = std.ArrayList(*const ast.Expression).init(allocator),
+            .statement_pointers = std.ArrayList(*const ast.Statement).init(allocator),
         };
         p.next_token();
         p.next_token();
@@ -79,6 +81,12 @@ const Parser = struct {
     pub fn deinit(self: *@This()) void {
         self.errors.deinit();
         self.expression_pointers.deinit();
+        for (self.statement_pointers.items) |statement| {
+            if (statement == .blk) |blk| {
+                blk.statements.deinit();
+            }
+        }
+        self.statement_pointers.deinit();
     }
 
     pub fn print_errors(self: *@This()) void {
@@ -193,6 +201,22 @@ const Parser = struct {
         return ast.ExpressionStatement{ .expression = expression };
     }
 
+    fn parse_block_statement(self: *@This()) !*const ast.BlockStatement {
+        self.next_token();
+        var statements = std.ArrayList(ast.Statement).init(self.allocator);
+        const block_ptr = try self.allocator.create(ast.Statement);
+        try self.statement_pointers.append(block_ptr);
+        block_ptr.* = ast.Statement{ .blk = ast.BlockStatement{
+            .token = self.curr_token,
+            .statements = statements,
+        } };
+        while (self.curr_token != .rbrace and self.curr_token != .eof) {
+            try statements.append(try self.parse_statement());
+            self.next_token();
+        }
+        return block_ptr;
+    }
+
     fn parse_expression(self: *@This(), precedence: Precedence) !*const ast.Expression {
         var left_exp = try self.parse_prefix_expr();
         // NOTE: no need to check for `;`, because it has the lowest precendece
@@ -237,6 +261,22 @@ const Parser = struct {
                 }
                 self.next_token();
                 break :blk exp.*;
+            },
+            .if_token => blk: {
+                if (self.peek_token != .lparen) return error.UnexpectedToken;
+                self.next_token();
+                const condition = try self.parse_expression(Precedence.lowest);
+                if (self.peek_token != .rparen) return error.UnexpectedToken;
+                self.next_token();
+                if (self.peek_token != .lbrace) return error.UnexpectedToken;
+                const consequence = try self.parse_block_statement();
+                const exp = ast.If{
+                    .token = .if_token,
+                    .condition = condition,
+                    .consequence = consequence,
+                    .alternative = null,
+                };
+                break :blk exp;
             },
             else => return error.UnexpectedToken,
         };
@@ -525,6 +565,50 @@ test "infix" {
         }
     }
 }
+
+// test "if" {
+//     const input =
+//         \\ if (x < y) { x }
+//     ;
+//     const cases = [_]struct {
+//         condition: *const ast.Expression,
+//         consequence: []const u8,
+//         alternative: []const u8,
+//     }{
+//         .{
+//             .condition = &(ast.Expression{ .inf = .{
+//                 .token = .lt,
+//                 .left = &(ast.Expression{ .ident = .{ .token = .{ .ident = "x" }, .value = "x" } }),
+//                 .right = &(ast.Expression{ .ident = .{ .token = .{ .ident = "y" }, .value = "y" } }),
+//             } }),
+//             .consequence = "x",
+//             .alternative = "",
+//         },
+//     };
+//
+//     var lexer = Lexer.init(input);
+//     var parser = Parser.init(&lexer, std.testing.allocator);
+//     var program = try parser.parse_program();
+//
+//     defer parser.deinit();
+//     defer program.deinit();
+//
+//     try expect(program.statements.items.len == cases.len);
+//     try expect(parser.errors.items.len == 0);
+//
+//     // std.debug.print("\n{}", .{program});
+//
+//     for (program.statements.items, cases) |statement, expected| {
+//         switch (statement.exp.expression.*) {
+//             .if_exp => |if_exp| {
+//                 try expect(if_exp.condition == expected.condition);
+//                 try std.testing.expectFmt(expected.consequence, "{}", .{if_exp.consequence});
+//                 try std.testing.expectFmt(expected.alternative, "{}", .{if_exp.alternative});
+//             },
+//             else => return error.UnexpectedToken,
+//         }
+//     }
+// }
 
 test "precedence" {
     const input =
