@@ -138,7 +138,7 @@ pub const Lexer = struct {
     }
 
     pub fn skip_line(self: *Lexer) void {
-        while (self.ch != '\n') {
+        while (self.ch != '\n' and self.ch != 0) {
             self.read_char();
         }
         self.skip_whitespace();

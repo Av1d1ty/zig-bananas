@@ -16,10 +16,10 @@ pub const Statement = union(enum) {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
-            .let => |let| writer.print("{s} {s} = {};\n", .{ "let", let.name.value, let.value }),
-            .ret => |ret| writer.print("{s} {?};\n", .{ "return", ret.value }),
-            .exp => |exp| writer.print("{};\n", .{exp.expression}),
-            .blk => |blk| for (blk.statements.items) |st| try writer.print("{}", .{st}),
+            .let => |let| writer.print("{s} {s} = {};", .{ "let", let.name.value, let.value }),
+            .ret => |ret| writer.print("{s} {?};", .{ "return", ret.value }),
+            .exp => |exp| writer.print("{};", .{exp.expression}), // TODO: no `;` for ifs
+            .blk => |blk| for (blk.statements) |st| try writer.print("{}\n", .{st}),
         };
     }
 };
@@ -46,23 +46,31 @@ pub const Expression = union(enum) {
             .bool => |boolean| writer.print("{}", .{boolean.value}),
             .pref => |pref| writer.print("({}{})", .{ pref.token, pref.right }),
             .inf => |inf| writer.print("({} {} {})", .{ inf.left, inf.token, inf.right }),
-            .if_exp => |if_exp| writer.print("if ({}) {{ {} }} else {{ {?} }}", .{
-                if_exp.condition,
-                if_exp.consequence,
-                if_exp.alternative,
-            }),
+            .if_exp => |if_exp| blk: {
+                if (if_exp.alternative) |alt| {
+                    break :blk writer.print(
+                        "if {} {{ {} }} else {{ {?} }}",
+                        .{ if_exp.condition, if_exp.consequence, alt },
+                    );
+                } else {
+                    break :blk writer.print(
+                        "if {} {{ {} }}",
+                        .{ if_exp.condition, if_exp.consequence },
+                    );
+                }
+            },
         };
     }
 };
 
 pub const LetStatement = struct {
-    token: Token,
+    token: Token, // TODO: remove, no use
     name: Identifier,
     value: *const Expression,
 };
 
 pub const ReturnStatement = struct {
-    token: Token,
+    token: Token, // TODO: remove, no use
     value: ?*const Expression,
 };
 
@@ -72,17 +80,17 @@ pub const ExpressionStatement = struct {
 };
 
 pub const Identifier = struct {
-    token: Token,
+    token: Token, // TODO: remove, no use
     value: []const u8,
 };
 
 pub const Integer = struct {
-    token: Token,
+    token: Token, // TODO: remove, no use
     value: i64,
 };
 
 pub const Boolean = struct {
-    token: Token,
+    token: Token, // TODO: remove, no use
     value: bool,
 };
 
@@ -98,20 +106,32 @@ pub const Infix = struct {
 };
 
 pub const If = struct {
-    token: Token,
+    token: Token, // TODO: remove, no use
     condition: *const Expression,
-    consequence: *const BlockStatement,
-    alternative: ?*const BlockStatement,
+    consequence: BlockStatement,
+    alternative: ?BlockStatement,
 };
 
 pub const BlockStatement = struct {
-    token: Token,
-    statements: std.ArrayList(Statement),
+    token: Token, // TODO: remove, no use
+    statements: []Statement,
+
+    pub fn format(
+        self: @This(),
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
+        return for (self.statements) |st| try writer.print("{}", .{st});
+    }
 };
 
 pub const Program = struct {
     allocator: std.mem.Allocator,
     statements: std.ArrayList(Statement),
+    // TODO: use Slice
     expression_pointers: std.ArrayList(*const Expression),
 
     pub fn init(allocator: std.mem.Allocator) !*Program {
@@ -126,6 +146,15 @@ pub const Program = struct {
 
     pub fn deinit(self: *@This()) void {
         for (self.expression_pointers.items) |exp| {
+            switch (exp.*) {
+                .if_exp => |ex| {
+                    self.allocator.free(ex.consequence.statements);
+                    if (ex.alternative) |alt| {
+                        self.allocator.free(alt.statements);
+                    }
+                },
+                else => {},
+            }
             self.allocator.destroy(exp);
         }
         self.expression_pointers.deinit();
@@ -141,9 +170,8 @@ pub const Program = struct {
     ) !void {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
-        // try writer.writeAll("\n");
         for (self.statements.items) |st| {
-            try writer.print("{}", .{st});
+            try writer.print("{}\n", .{st});
         }
     }
 };

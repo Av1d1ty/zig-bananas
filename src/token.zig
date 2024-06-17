@@ -98,6 +98,11 @@ pub const Token = union(enum) {
             .not_eq => "!=",
             .lparen => "(",
             .rparen => ")",
+            .lbrace => "{",
+            .rbrace => "}",
+            .true_token => "true",
+            .false_token => "false",
+            .return_token => "return",
             else => "??",
         };
         return writer.print("{s}", .{string});
