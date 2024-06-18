@@ -80,11 +80,6 @@ const Parser = struct {
 
     pub fn deinit(self: *@This()) void {
         self.errors.deinit();
-        // for (self.expression_pointers.items) |exp| {
-        //     if (exp.* == .if_exp) {
-        //         exp.if_exp.consequence.statements.deinit();
-        //     }
-        // }
         self.expression_pointers.deinit();
     }
 
@@ -241,7 +236,7 @@ const Parser = struct {
             } },
             .true_token, .false_token => ast.Expression{ .bool = ast.Boolean{
                 .token = self.curr_token,
-                .value = if (token == .true_token) true else false,
+                .value = token == .true_token,
             } },
             .minus, .bang => blk: {
                 const tok = self.curr_token;
@@ -261,6 +256,7 @@ const Parser = struct {
                 break :blk exp.*;
             },
             .if_token => blk: {
+                // TODO: write `expect_token` func
                 if (self.peek_token != .lparen) return error.UnexpectedToken;
                 self.next_token();
                 const condition = try self.parse_expression(Precedence.lowest);
@@ -271,6 +267,7 @@ const Parser = struct {
                 var alternative: ?ast.BlockStatement = null;
                 if (self.peek_token == .else_token) {
                     self.next_token();
+                    if (self.peek_token != .lbrace) return error.UnexpectedToken;
                     self.next_token();
                     alternative = try self.parse_block_statement();
                 }
@@ -287,6 +284,12 @@ const Parser = struct {
         try self.expression_pointers.append(exp_ptr);
         return exp_ptr;
     }
+
+    // Advance token and return `UnexpectedToken` if the actual value differs
+    // fn expect_token(self: *@This(), token: Token) ParserError!void {
+    //     if (!std.meta.eql(self.peek_token, token)) return error.UnexpectedToken;
+    //     self.next_token();
+    // }
 
     fn parse_infix_expr(self: *@This(), left: *const ast.Expression) ParserError!*const ast.Expression {
         const token = self.curr_token;
