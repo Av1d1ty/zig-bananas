@@ -57,13 +57,11 @@ const ErrorInfo = struct {
 const Parser = struct {
     lexer: *Lexer,
     allocator: std.mem.Allocator,
-    // TODO: use Slice??
     errors: std.ArrayList(ErrorInfo),
 
     curr_token: Token = Token.illegal,
     peek_token: Token = Token.illegal,
 
-    // TODO: use Slice
     expression_pointers: std.ArrayList(*const ast.Expression),
 
     pub fn init(lexer: *Lexer, allocator: std.mem.Allocator) @This() {
@@ -80,7 +78,6 @@ const Parser = struct {
 
     pub fn deinit(self: *@This()) void {
         self.errors.deinit();
-        self.expression_pointers.deinit();
     }
 
     pub fn print_errors(self: *@This()) void {
@@ -90,8 +87,8 @@ const Parser = struct {
         }
     }
 
-    pub fn parse_program(self: *@This()) !*ast.Program {
-        var program = try ast.Program.init(self.allocator);
+    pub fn parse_program(self: *@This()) !ast.Program {
+        var statements = std.ArrayList(ast.Statement).init(self.allocator);
         while (self.curr_token != Token.eof) : (self.next_token()) {
             const statement = self.parse_statement() catch |err| {
                 try self.errors.append(ErrorInfo{
@@ -104,13 +101,16 @@ const Parser = struct {
                 self.lexer.skip_line();
                 continue;
             };
-            try program.statements.append(statement);
+            try statements.append(statement);
         }
-        program.expression_pointers = try self.expression_pointers.clone();
         if (self.errors.items.len > 0) {
             self.print_errors();
         }
-        return program;
+        return ast.Program{
+            .allocator = self.allocator,
+            .statements = try statements.toOwnedSlice(),
+            .expression_pointers = try self.expression_pointers.toOwnedSlice(),
+        };
     }
 
     fn next_token(self: *@This()) void {
@@ -331,12 +331,12 @@ test "let_statements" {
     defer parser.deinit();
     defer program.deinit();
 
-    try expect(program.statements.items.len == cases.len);
+    try expect(program.statements.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
     // std.debug.print("\n{}", .{program});
 
-    for (program.statements.items, cases) |statement, expected| {
+    for (program.statements, cases) |statement, expected| {
         switch (statement) {
             .let => |val| {
                 try std.testing.expectEqualStrings(expected.ident, val.name.value);
@@ -365,10 +365,10 @@ test "return_statements" {
 
     // std.debug.print("\n{}", .{program});
 
-    try expect(program.statements.items.len == cases.len);
+    try expect(program.statements.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
-    for (program.statements.items, cases) |statement, expected| {
+    for (program.statements, cases) |statement, expected| {
         switch (statement) {
             .ret => |val| {
                 try std.testing.expectFmt(expected, "{?}", .{val.value});
@@ -392,12 +392,12 @@ test "identifiers" {
     defer parser.deinit();
     defer program.deinit();
 
-    try expect(program.statements.items.len == cases.len);
+    try expect(program.statements.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
     // std.debug.print("\n{}", .{program});
 
-    for (program.statements.items, cases) |statement, expected| {
+    for (program.statements, cases) |statement, expected| {
         switch (statement) {
             .exp => |exp| {
                 switch (exp.expression.*) {
@@ -427,12 +427,12 @@ test "integers" {
     defer parser.deinit();
     defer program.deinit();
 
-    try expect(program.statements.items.len == cases.len);
+    try expect(program.statements.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
     // std.debug.print("\n{}", .{program});
 
-    for (program.statements.items, cases) |statement, expected| {
+    for (program.statements, cases) |statement, expected| {
         switch (statement) {
             .exp => |exp| {
                 switch (exp.expression.*) {
@@ -462,12 +462,12 @@ test "booleans" {
     defer parser.deinit();
     defer program.deinit();
 
-    try expect(program.statements.items.len == cases.len);
+    try expect(program.statements.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
     // std.debug.print("\n{}", .{program});
 
-    for (program.statements.items, cases) |statement, expected| {
+    for (program.statements, cases) |statement, expected| {
         switch (statement) {
             .exp => |exp| {
                 switch (exp.expression.*) {
@@ -502,10 +502,10 @@ test "prefix" {
 
     // std.debug.print("\n{}", .{program});
 
-    try expect(program.statements.items.len == cases.len);
+    try expect(program.statements.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
-    for (program.statements.items, cases) |statement, expected| {
+    for (program.statements, cases) |statement, expected| {
         switch (statement.exp.expression.*) {
             .pref => |pref| {
                 switch (pref.token) {
@@ -554,12 +554,12 @@ test "infix" {
     defer parser.deinit();
     defer program.deinit();
 
-    try expect(program.statements.items.len == cases.len);
+    try expect(program.statements.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
     // std.debug.print("\n{}", .{program});
 
-    for (program.statements.items, cases) |statement, expected| {
+    for (program.statements, cases) |statement, expected| {
         switch (statement.exp.expression.*) {
             .inf => |inf| {
                 if (inf.left.* != .int or inf.right.* != .int) {
@@ -611,12 +611,12 @@ test "if" {
     defer parser.deinit();
     defer program.deinit();
 
-    try expect(program.statements.items.len == cases.len);
+    try expect(program.statements.len == cases.len);
     try expect(parser.errors.items.len == 0);
 
     // std.debug.print("\n{}", .{program});
 
-    for (program.statements.items, cases) |statement, expected| {
+    for (program.statements, cases) |statement, expected| {
         switch (statement.exp.expression.*) {
             .if_exp => |if_exp| {
                 try std.testing.expectFmt(expected.consequence, "{}", .{if_exp.consequence});

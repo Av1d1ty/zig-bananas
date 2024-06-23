@@ -129,23 +129,13 @@ pub const BlockStatement = struct {
 };
 
 pub const Program = struct {
+    /// Used to deallocate parsed statements and expressions
     allocator: std.mem.Allocator,
-    statements: std.ArrayList(Statement),
-    // TODO: use Slice
-    expression_pointers: std.ArrayList(*const Expression),
-
-    pub fn init(allocator: std.mem.Allocator) !*Program {
-        const program_ptr = try allocator.create(Program);
-        program_ptr.* = Program{
-            .allocator = allocator,
-            .statements = std.ArrayList(Statement).init(allocator),
-            .expression_pointers = std.ArrayList(*const Expression).init(allocator),
-        };
-        return program_ptr;
-    }
+    statements: []Statement,
+    expression_pointers: []*const Expression,
 
     pub fn deinit(self: *@This()) void {
-        for (self.expression_pointers.items) |exp| {
+        for (self.expression_pointers) |exp| {
             switch (exp.*) {
                 .if_exp => |ex| {
                     self.allocator.free(ex.consequence.statements);
@@ -157,9 +147,8 @@ pub const Program = struct {
             }
             self.allocator.destroy(exp);
         }
-        self.expression_pointers.deinit();
-        self.statements.deinit();
-        self.allocator.destroy(self);
+        self.allocator.free(self.expression_pointers);
+        self.allocator.free(self.statements);
     }
 
     pub fn format(
@@ -170,16 +159,16 @@ pub const Program = struct {
     ) !void {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
-        for (self.statements.items) |st| {
+        for (self.statements) |st| {
             try writer.print("{}\n", .{st});
         }
     }
 };
 
 test "string" {
-    var program = try Program.init(std.testing.allocator);
-    defer program.deinit();
-    try program.statements.append(.{
+    var statements = std.ArrayList(Statement).init(std.testing.allocator);
+    var expressions = std.ArrayList(*const Expression).init(std.testing.allocator);
+    try statements.append(.{
         .let = LetStatement{
             .token = .let,
             .name = Identifier{
@@ -192,5 +181,11 @@ test "string" {
             } }),
         },
     });
+    var program = Program{
+        .allocator = std.testing.allocator,
+        .statements = try statements.toOwnedSlice(),
+        .expression_pointers = try expressions.toOwnedSlice(),
+    };
+    defer program.deinit();
     try std.testing.expectFmt("let myVar = 42;\n", "{}", .{program});
 }
