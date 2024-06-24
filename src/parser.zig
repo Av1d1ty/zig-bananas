@@ -249,14 +249,11 @@ const Parser = struct {
             .lparen => blk: {
                 self.next_token();
                 const exp = try self.parse_expression(Precedence.lowest);
-                if (self.peek_token != .rparen) {
-                    return error.UnexpectedToken;
-                }
+                if (self.peek_token != .rparen) return error.UnexpectedToken;
                 self.next_token();
                 break :blk exp.*;
             },
             .if_token => blk: {
-                // TODO: write `expect_token` func
                 if (self.peek_token != .lparen) return error.UnexpectedToken;
                 self.next_token();
                 const condition = try self.parse_expression(Precedence.lowest);
@@ -279,17 +276,38 @@ const Parser = struct {
                 } };
                 break :blk exp;
             },
+            .function => blk: {
+                if (self.peek_token != .lparen) return error.UnexpectedToken;
+                self.next_token();
+                self.next_token();
+                var params = std.ArrayList(ast.Identifier).init(self.allocator);
+                errdefer params.deinit();
+                while (self.curr_token != .rparen) : (self.next_token()) {
+                    if (self.curr_token != .ident) return error.UnexpectedToken;
+                    try params.append(ast.Identifier{
+                        .token = self.curr_token,
+                        .value = self.curr_token.get_value().?,
+                    });
+                    switch (self.peek_token) {
+                        .comma => self.next_token(),
+                        .rparen => {},
+                        else => return error.UnexpectedToken,
+                    }
+                }
+                self.next_token();
+                if (self.curr_token != .lbrace) return error.UnexpectedToken;
+                const exp = .{ .func = ast.Function{
+                    .token = .function,
+                    .parameters = try params.toOwnedSlice(),
+                    .body = try self.parse_block_statement(),
+                } };
+                break :blk exp;
+            },
             else => return error.UnexpectedToken,
         };
         try self.expression_pointers.append(exp_ptr);
         return exp_ptr;
     }
-
-    // Advance token and return `UnexpectedToken` if the actual value differs
-    // fn expect_token(self: *@This(), token: Token) ParserError!void {
-    //     if (!std.meta.eql(self.peek_token, token)) return error.UnexpectedToken;
-    //     self.next_token();
-    // }
 
     fn parse_infix_expr(self: *@This(), left: *const ast.Expression) ParserError!*const ast.Expression {
         const token = self.curr_token;
@@ -650,6 +668,9 @@ test "precedence" {
         \\!(true == true)
         \\if (a != b) { return true }
         \\if (true) { x } else { a + b }
+        \\fn (x, y) { return x + y };
+        \\fn (x) { return x }
+        \\fn () { return true }
     ;
     const expected =
         \\((-a) * b);
@@ -674,6 +695,9 @@ test "precedence" {
         \\(!(true == true));
         \\if (a != b) { return true; };
         \\if true { x; } else { (a + b); };
+        \\fn (x, y) { return (x + y); };
+        \\fn (x) { return x; };
+        \\fn () { return true; };
         \\
     ;
 
@@ -683,6 +707,8 @@ test "precedence" {
 
     defer parser.deinit();
     defer program.deinit();
+
+    // std.debug.print("{}", .{program});
 
     try expect(parser.errors.items.len == 0);
     try std.testing.expectFmt(expected, "{}", .{program});

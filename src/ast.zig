@@ -31,6 +31,7 @@ pub const Expression = union(enum) {
     pref: Prefix,
     inf: Infix,
     if_exp: If,
+    func: Function,
 
     pub fn format(
         self: @This(),
@@ -58,6 +59,16 @@ pub const Expression = union(enum) {
                         .{ if_exp.condition, if_exp.consequence },
                     );
                 }
+            },
+            .func => |func| {
+                try writer.print("{}", .{func.token});
+                try writer.writeAll(" (");
+                for (1.., func.parameters) |i, param| {
+                    try writer.print("{s}", .{param.value});
+                    if (func.parameters.len != 1 and i != func.parameters.len) try writer.writeAll(", ");
+                }
+                try writer.writeAll(") ");
+                try writer.print("{{ {} }}", .{func.body});
             },
         };
     }
@@ -112,6 +123,12 @@ pub const If = struct {
     alternative: ?BlockStatement,
 };
 
+pub const Function = struct {
+    token: Token,
+    parameters: []Identifier,
+    body: BlockStatement,
+};
+
 pub const BlockStatement = struct {
     token: Token, // TODO: remove, no use
     statements: []Statement,
@@ -142,6 +159,10 @@ pub const Program = struct {
                     if (ex.alternative) |alt| {
                         self.allocator.free(alt.statements);
                     }
+                },
+                .func => |ex| {
+                    self.allocator.free(ex.parameters);
+                    self.allocator.free(ex.body.statements);
                 },
                 else => {},
             }

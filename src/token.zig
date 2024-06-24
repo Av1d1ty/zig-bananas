@@ -97,14 +97,21 @@ pub const Token = union(enum) {
             .gt => ">",
             .eq => "==",
             .not_eq => "!=",
+            .comma => ",",
+            .semicolon => ";",
             .lparen => "(",
             .rparen => ")",
             .lbrace => "{",
             .rbrace => "}",
+            .return_token => "return",
+            .let => "let",
+            .function => "fn",
+            .if_token => "if",
+            .else_token => "else",
             .true_token => "true",
             .false_token => "false",
-            .return_token => "return",
-            else => "??",
+            .eof => "eof",
+            .illegal => "illegal",
         };
         return writer.print("{s}", .{string});
     }
