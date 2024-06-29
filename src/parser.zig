@@ -18,6 +18,7 @@ const Precedence = enum {
             .lt, .gt => .less_greater,
             .plus, .minus => .sum,
             .slash, .asterisk => .product,
+            .lparen => .call,
             else => .lowest,
         };
     }
@@ -29,6 +30,9 @@ const ParserError = error{
     InvalidCharacter,
 
     UnexpectedToken,
+    InvalidPrefixToken,
+    InvalidInfixToken,
+    InvalidFunctionToken,
 };
 
 const ErrorInfo = struct {
@@ -212,6 +216,7 @@ const Parser = struct {
 
     fn parse_expression(self: *@This(), precedence: Precedence) !*const ast.Expression {
         var left_exp = try self.parse_prefix_expr();
+        // std.debug.print("\nPARSE EXPRESSION:\nCURR_TOKEN: {}\nPEEK_TOKEN: {}\nLEFT: {}\n", .{ self.curr_token, self.peek_token, left_exp });
         // NOTE: no need to check for `;`, because it has the lowest precendece
         // and the loop will break anyway
         while (@intFromEnum(precedence) < @intFromEnum(Precedence.of(self.peek_token))) {
@@ -303,26 +308,61 @@ const Parser = struct {
                 } };
                 break :blk exp;
             },
-            else => return error.UnexpectedToken,
+            else => return error.InvalidPrefixToken,
         };
         try self.expression_pointers.append(exp_ptr);
         return exp_ptr;
     }
 
     fn parse_infix_expr(self: *@This(), left: *const ast.Expression) ParserError!*const ast.Expression {
-        const token = self.curr_token;
-        self.next_token();
+        const exp = switch (self.curr_token) {
+            .plus, .minus, .slash, .asterisk, .eq, .not_eq, .lt, .gt => blk: {
+                const token = self.curr_token;
+                self.next_token();
+                break :blk ast.Expression{
+                    .inf = ast.Infix{
+                        .token = token,
+                        .left = left,
+                        .right = try self.parse_expression(Precedence.of(token)),
+                    },
+                };
+            },
+            .lparen => ast.Expression{ .call = try self.parse_call_expression(left) },
+            else => return left,
+        };
         const exp_ptr = try self.allocator.create(ast.Expression);
         errdefer self.allocator.destroy(exp_ptr);
-        exp_ptr.* = ast.Expression{
-            .inf = ast.Infix{
-                .token = token,
-                .left = left,
-                .right = try self.parse_expression(Precedence.of(token)),
-            },
-        };
+        exp_ptr.* = exp;
         try self.expression_pointers.append(exp_ptr);
         return exp_ptr;
+    }
+
+    fn parse_call_expression(self: *@This(), function: *const ast.Expression) ParserError!ast.Call {
+        return ast.Call{
+            .token = self.curr_token,
+            .func = switch (function.*) {
+                .func => .{ .func = function.func },
+                .ident => .{ .ident = function.ident },
+                else => return error.InvalidFunctionToken,
+            },
+            .arguments = try self.parse_call_arguments(),
+        };
+    }
+
+    fn parse_call_arguments(self: *@This()) ParserError![]ast.Expression {
+        var args = std.ArrayList(ast.Expression).init(self.allocator);
+        errdefer args.deinit();
+        self.next_token();
+        if (self.curr_token == .rparen) return args.toOwnedSlice();
+        try args.append((try self.parse_expression(.lowest)).*);
+        while (self.peek_token == .comma) {
+            self.next_token();
+            self.next_token();
+            try args.append((try self.parse_expression(.lowest)).*);
+        }
+        self.next_token();
+        if (self.curr_token != .rparen) return error.UnexpectedToken;
+        return args.toOwnedSlice();
     }
 };
 
@@ -661,7 +701,7 @@ test "precedence" {
         \\3 + 4 * 5 == 3 * 1 + 4 * 5
         \\foobar == true
         \\baz != false
-        \\1 + (2 + 3) + 4
+        \\1 + (2 + 3) + 4;
         \\(5 + 5) * 2
         \\2 / (5 + 5);
         \\-(5 + 5)
@@ -671,6 +711,7 @@ test "precedence" {
         \\fn (x, y) { return x + y };
         \\fn (x) { return x }
         \\fn () { return true }
+        \\add(1, 2 * 3, 4 + 5);
     ;
     const expected =
         \\((-a) * b);
@@ -698,6 +739,7 @@ test "precedence" {
         \\fn (x, y) { return (x + y); };
         \\fn (x) { return x; };
         \\fn () { return true; };
+        \\add(1, (2 * 3), (4 + 5));
         \\
     ;
 

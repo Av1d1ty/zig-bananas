@@ -7,12 +7,7 @@ pub const Statement = union(enum) {
     exp: ExpressionStatement,
     blk: BlockStatement,
 
-    pub fn format(
-        self: @This(),
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
@@ -32,17 +27,13 @@ pub const Expression = union(enum) {
     inf: Infix,
     if_exp: If,
     func: Function,
+    call: Call,
 
-    pub fn format(
-        self: @This(),
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
-            .ident => |ident| writer.print("{s}", .{ident.value}),
+            .ident => |ident| writer.print("{}", .{ident}),
             .int => |int| writer.print("{d}", .{int.value}),
             .bool => |boolean| writer.print("{}", .{boolean.value}),
             .pref => |pref| writer.print("({}{})", .{ pref.token, pref.right }),
@@ -60,28 +51,32 @@ pub const Expression = union(enum) {
                     );
                 }
             },
-            .func => |func| {
-                try writer.print("{}", .{func.token});
-                try writer.writeAll(" (");
-                for (1.., func.parameters) |i, param| {
-                    try writer.print("{s}", .{param.value});
-                    if (func.parameters.len != 1 and i != func.parameters.len) try writer.writeAll(", ");
+            .func => |func| try writer.print("{}", .{func}),
+            .call => |call| {
+                switch (call.func) {
+                    inline .func, .ident => |func| try writer.print("{}", .{func}),
                 }
-                try writer.writeAll(") ");
-                try writer.print("{{ {} }}", .{func.body});
+                try writer.writeAll("(");
+                for (1.., call.arguments) |i, arg| {
+                    try writer.print("{}", .{arg});
+                    if (call.arguments.len != 1 and i != call.arguments.len) try writer.writeAll(", ");
+                }
+                try writer.writeAll(")");
             },
         };
     }
 };
 
+// TODO: recinsider Token usage in the structs below
+
 pub const LetStatement = struct {
-    token: Token, // TODO: remove, no use
+    token: Token,
     name: Identifier,
     value: *const Expression,
 };
 
 pub const ReturnStatement = struct {
-    token: Token, // TODO: remove, no use
+    token: Token,
     value: ?*const Expression,
 };
 
@@ -91,17 +86,23 @@ pub const ExpressionStatement = struct {
 };
 
 pub const Identifier = struct {
-    token: Token, // TODO: remove, no use
+    token: Token,
     value: []const u8,
+
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
+        return writer.print("{s}", .{self.value});
+    }
 };
 
 pub const Integer = struct {
-    token: Token, // TODO: remove, no use
+    token: Token,
     value: i64,
 };
 
 pub const Boolean = struct {
-    token: Token, // TODO: remove, no use
+    token: Token,
     value: bool,
 };
 
@@ -117,7 +118,7 @@ pub const Infix = struct {
 };
 
 pub const If = struct {
-    token: Token, // TODO: remove, no use
+    token: Token,
     condition: *const Expression,
     consequence: BlockStatement,
     alternative: ?BlockStatement,
@@ -127,18 +128,32 @@ pub const Function = struct {
     token: Token,
     parameters: []Identifier,
     body: BlockStatement,
+
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
+        try writer.print("{}", .{self.token});
+        try writer.writeAll(" (");
+        for (1.., self.parameters) |i, param| {
+            try writer.print("{}", .{param});
+            if (self.parameters.len != 1 and i != self.parameters.len) try writer.writeAll(", ");
+        }
+        try writer.writeAll(") ");
+        try writer.print("{{ {} }}", .{self.body});
+    }
+};
+
+pub const Call = struct {
+    token: Token, // The '(' token
+    func: union(enum) { func: Function, ident: Identifier },
+    arguments: []Expression,
 };
 
 pub const BlockStatement = struct {
-    token: Token, // TODO: remove, no use
+    token: Token,
     statements: []Statement,
 
-    pub fn format(
-        self: @This(),
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return for (self.statements) |st| try writer.print("{}", .{st});
@@ -164,6 +179,9 @@ pub const Program = struct {
                     self.allocator.free(ex.parameters);
                     self.allocator.free(ex.body.statements);
                 },
+                .call => |call| {
+                    self.allocator.free(call.arguments);
+                },
                 else => {},
             }
             self.allocator.destroy(exp);
@@ -172,12 +190,7 @@ pub const Program = struct {
         self.allocator.free(self.statements);
     }
 
-    pub fn format(
-        self: @This(),
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         for (self.statements) |st| {
