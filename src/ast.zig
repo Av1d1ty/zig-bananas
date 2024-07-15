@@ -11,9 +11,9 @@ pub const Statement = union(enum) {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
-            .let => |let| writer.print("{s} {s} = {};", .{ "let", let.name.value, let.value }),
-            .ret => |ret| writer.print("{s} {?};", .{ "return", ret.value }),
-            .exp => |exp| writer.print("{};", .{exp.expression}), // TODO: no `;` for ifs
+            .let => |let| writer.print("{s} {s} = {}", .{ "let", let.name.value, let.value }),
+            .ret => |ret| writer.print("{s} {?}", .{ "return", ret.value }),
+            .exp => |exp| writer.print("{}", .{exp.expression}),
             .blk => |blk| for (blk.statements) |st| try writer.print("{}\n", .{st}),
         };
     }
@@ -67,7 +67,7 @@ pub const Expression = union(enum) {
     }
 };
 
-// TODO: recinsider Token usage in the structs below
+// TODO: reconsider Token usage in the structs below
 
 pub const LetStatement = struct {
     token: Token,
@@ -156,7 +156,7 @@ pub const BlockStatement = struct {
     pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
-        return for (self.statements) |st| try writer.print("{}", .{st});
+        return for (self.statements) |st| try writer.print("{};", .{st});
     }
 };
 
@@ -195,6 +195,11 @@ pub const Program = struct {
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         for (self.statements) |st| {
             try writer.print("{}\n", .{st});
+            // if (st == .exp and (st.exp.expression.* == .func or st.exp.expression.* == .if_exp)) {
+            //     try writer.writeAll("\n");
+            //     continue;
+            // }
+            // try writer.writeAll("\n");
         }
     }
 };
@@ -221,5 +226,5 @@ test "string" {
         .expression_pointers = try expressions.toOwnedSlice(),
     };
     defer program.deinit();
-    try std.testing.expectFmt("let myVar = 42;\n", "{}", .{program});
+    try std.testing.expectFmt("let myVar = 42\n", "{}", .{program});
 }
