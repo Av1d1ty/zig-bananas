@@ -50,7 +50,6 @@ const ErrorInfo = struct {
     ) !void {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
-        // TODO: prettify
         return writer.print(
             "{}: row {d}, col {d}, token '{}'\n\ton line '{s}'.\n",
             .{ self.err, self.row, self.col, self.token, self.line },

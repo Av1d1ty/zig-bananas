@@ -162,7 +162,7 @@ pub const BlockStatement = struct {
 
 pub const Program = struct {
     /// Used to deallocate parsed statements and expressions
-    allocator: std.mem.Allocator, // TODO: move to deinit parameters
+    allocator: std.mem.Allocator,
     statements: []Statement,
     expression_pointers: []*const Expression,
 

@@ -62,7 +62,6 @@ pub const Token = union(enum) {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         const string = switch (self) {
-            // TODO: complete switch
             .int => |int| int,
             .ident => |ident| ident,
             .assign => "=",
