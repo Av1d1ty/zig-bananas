@@ -57,7 +57,7 @@ const ErrorInfo = struct {
     }
 };
 
-const Parser = struct {
+pub const Parser = struct {
     lexer: *Lexer,
     allocator: std.mem.Allocator,
     errors: std.ArrayList(ErrorInfo),

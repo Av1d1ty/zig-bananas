@@ -1,6 +1,7 @@
 const std = @import("std");
 const Token = @import("token.zig").Token;
 const Lexer = @import("lexer.zig").Lexer;
+const Parser = @import("parser.zig").Parser;
 
 const prompt = "λ ";
 
@@ -17,11 +18,10 @@ pub fn start() !void {
         const maybe_input = try stdin.readUntilDelimiterOrEofAlloc(alloc, '\n', 100);
         if (maybe_input) |input| {
             defer alloc.free(input);
-            var l = Lexer.init(input);
-            var token = l.next_token();
-            while (token != Token.eof) : (token = l.next_token()) {
-                try stdout.print("{s} {s}\n", .{ @tagName(token), token.get_value() orelse "" });
-            }
+            var lexer = Lexer.init(input);
+            var parser = Parser.init(&lexer, alloc);
+            const program = try parser.parse_program();
+            try stdout.print("{}\n", .{program});
         }
     }
 }
