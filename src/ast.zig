@@ -1,6 +1,12 @@
 const std = @import("std");
 const Token = @import("token.zig").Token;
 
+pub const Node = union(enum) {
+    statement: Statement,
+    expression: *const Expression,
+    program: *const Program,
+};
+
 pub const Statement = union(enum) {
     let: LetStatement,
     ret: ReturnStatement,

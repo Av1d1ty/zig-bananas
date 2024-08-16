@@ -2,6 +2,8 @@ const std = @import("std");
 const Token = @import("token.zig").Token;
 const Lexer = @import("lexer.zig").Lexer;
 const Parser = @import("parser.zig").Parser;
+const Node = @import("ast.zig").Node;
+const eval = @import("eval.zig").eval;
 
 const prompt = "λ ";
 
@@ -21,7 +23,8 @@ pub fn start() !void {
             var lexer = Lexer.init(input);
             var parser = Parser.init(&lexer, alloc);
             const program = try parser.parse_program();
-            try stdout.print("{}\n", .{program});
+            const eval_result = eval(Node{ .program = program });
+            try stdout.print("{}\n", .{eval_result});
         }
     }
 }

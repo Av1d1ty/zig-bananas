@@ -215,7 +215,6 @@ pub const Parser = struct {
 
     fn parse_expression(self: *@This(), precedence: Precedence) !*const ast.Expression {
         var left_exp = try self.parse_prefix_expr();
-        // std.debug.print("\nPARSE EXPRESSION:\nCURR_TOKEN: {}\nPEEK_TOKEN: {}\nLEFT: {}\n", .{ self.curr_token, self.peek_token, left_exp });
         // NOTE: no need to check for `;`, because it has the lowest precendece
         // and the loop will break anyway
         while (@intFromEnum(precedence) < @intFromEnum(Precedence.of(self.peek_token))) {
