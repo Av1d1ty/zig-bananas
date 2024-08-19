@@ -13,7 +13,7 @@ pub const Object = union(enum) {
         _ = options;
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
-            .null => writer.print("null", .{}),
+            .null => writer.writeAll("null"),
             inline else => |obj| writer.print("{any}", .{obj.value}),
         };
     }

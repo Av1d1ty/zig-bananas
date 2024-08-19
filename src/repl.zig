@@ -3,7 +3,7 @@ const Token = @import("token.zig").Token;
 const Lexer = @import("lexer.zig").Lexer;
 const Parser = @import("parser.zig").Parser;
 const Node = @import("ast.zig").Node;
-const eval = @import("eval.zig").eval;
+const Evaluator = @import("eval.zig").Evaluator;
 
 const prompt = "λ ";
 
@@ -21,9 +21,15 @@ pub fn start() !void {
         if (maybe_input) |input| {
             defer alloc.free(input);
             var lexer = Lexer.init(input);
+
             var parser = Parser.init(&lexer, alloc);
-            const program = try parser.parse_program();
-            const eval_result = eval(Node{ .program = program });
+            defer parser.deinit();
+
+            var program = try parser.parse_program();
+            defer program.deinit();
+
+            var evaluator = Evaluator{ .allocator = alloc };
+            const eval_result = evaluator.eval(Node{ .program = &program });
             try stdout.print("{}\n", .{eval_result});
         }
     }
