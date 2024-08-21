@@ -7,30 +7,35 @@ const obj = @import("object.zig");
 pub const Evaluator = struct {
     allocator: std.mem.Allocator,
 
-    pub fn eval(self: @This(), node: Node) *const obj.Object {
+    pub fn eval(self: @This(), node: Node) !*const obj.Object {
         return switch (node) {
             .program => |prog| blk: {
                 var result = obj.NULL;
-                for (prog.statements) |stmt| result = self.eval(Node{ .statement = stmt });
+                for (prog.statements) |stmt| result = try self.eval(Node{ .statement = stmt });
                 // std.debug.print("\nresult: {}\n", .{result});
                 break :blk result;
             },
             .statement => |stmt| switch (stmt) {
-                .exp => |exp| self.eval(Node{ .expression = exp.expression }),
+                .exp => |exp| try self.eval(Node{ .expression = exp.expression }),
                 else => unreachable,
             },
             .expression => |expr| switch (expr.*) {
                 .int => |int| self.alloc_obj(obj.Object{ .int = obj.Integer{ .value = int.value } }),
                 .bool => |bool_| if (bool_.value) obj.TRUE else obj.FALSE,
                 .pref => |pref| blk: {
-                    const right = self.eval(Node{ .expression = pref.right });
+                    const right = try self.eval(Node{ .expression = pref.right });
                     break :blk switch (pref.token) {
                         .bang => switch (right.*) {
                             .bool => if (right == obj.FALSE) obj.TRUE else obj.FALSE,
                             .null => obj.TRUE,
                             .int => |int| if (int.value == 0) obj.TRUE else obj.FALSE,
                         },
-                        // .minus => {},
+                        .minus => switch (right.*) {
+                            .int => |int| self.alloc_obj(
+                                obj.Object{ .int = obj.Integer{ .value = -int.value } },
+                            ),
+                            else => error.InvalidPrefixOperand,
+                        },
                         else => unreachable,
                     };
                 },
@@ -57,7 +62,8 @@ fn test_eval(input: []const u8) !obj.Object {
     defer program.deinit();
     defer arena.deinit();
 
-    return evaluator.eval(Node{ .program = &program }).*;
+    const eval_result = try evaluator.eval(Node{ .program = &program });
+    return eval_result.*;
 }
 
 test "integer" {
@@ -67,6 +73,8 @@ test "integer" {
     }{
         .{ .input = "5", .expected = 5 },
         .{ .input = "10", .expected = 10 },
+        .{ .input = "-5", .expected = -5 },
+        .{ .input = "-10", .expected = -10 },
     };
     for (cases) |case| {
         const result = try test_eval(case.input);

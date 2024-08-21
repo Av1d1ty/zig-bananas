@@ -30,7 +30,7 @@ pub fn start() !void {
 
             var evaluator = Evaluator{ .allocator = alloc };
             const eval_result = evaluator.eval(Node{ .program = &program });
-            try stdout.print("{}\n", .{eval_result});
+            try stdout.print("{!}\n", .{eval_result});
         }
     }
 }
