@@ -242,10 +242,9 @@ pub const Parser = struct {
                 .value = token == .true_token,
             } },
             .minus, .bang => blk: {
-                const tok = self.curr_token;
                 self.next_token();
                 break :blk ast.Expression{ .pref = ast.Prefix{
-                    .token = tok,
+                    .operator = if (token == .minus) .minus else .bang,
                     .right = try self.parse_expression(Precedence.prefix),
                 } };
             },
@@ -319,7 +318,7 @@ pub const Parser = struct {
                 self.next_token();
                 break :blk ast.Expression{
                     .inf = ast.Infix{
-                        .token = token,
+                        .operator = op,
                         .left = left,
                         .right = try self.parse_expression(Precedence.of(token)),
                     },
@@ -580,11 +579,11 @@ test "prefix" {
 
     const cases = [_]ast.Prefix{
         ast.Prefix{
-            .token = .minus,
+            .operator = .minus,
             .right = &(ast.Expression{ .int = ast.Integer{ .token = .{ .int = "5" }, .value = 5 } }),
         },
         ast.Prefix{
-            .token = .bang,
+            .operator = .bang,
             .right = &(ast.Expression{ .bool = ast.Boolean{ .token = .true_token, .value = true } }),
         },
     };
