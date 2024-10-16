@@ -42,7 +42,7 @@ pub const Expression = union(enum) {
             .ident => |ident| writer.print("{}", .{ident}),
             .int => |int| writer.print("{d}", .{int.value}),
             .bool => |boolean| writer.print("{}", .{boolean.value}),
-            .pref => |pref| writer.print("({}{})", .{ pref.token, pref.right }),
+            .pref => |pref| writer.print("({}{})", .{ pref.operator, pref.right }),
             .inf => |inf| writer.print("({} {} {})", .{ inf.left, inf.token, inf.right }),
             .if_exp => |if_exp| blk: {
                 if (if_exp.alternative) |alt| {
@@ -113,15 +113,33 @@ pub const Boolean = struct {
 };
 
 pub const Prefix = struct {
-    token: Token, // The prefix token, e.g. `!`
+    operator: PrefixOperator, // The prefix token, e.g. `!`
     right: *const Expression,
 };
 
+pub const PrefixOperator = union(enum) { bang, minus };
+
 pub const Infix = struct {
-    token: Token,
+    operator: InfixOperator,
     left: *const Expression,
     right: *const Expression,
 };
+
+pub const InfixOperator = union(enum) { plus, minus, asterisk, slash, gt, lt, eq, not_eq };
+
+pub fn infix_operator_from_token(token: Token) error{UnsupportedInfixToken}!InfixOperator {
+    return switch (token) {
+        .plus => .plus,
+        .minus => .minus,
+        .asterisk => .asterisk,
+        .slash => .slash,
+        .gt => .gt,
+        .lt => .lt,
+        .eq => .eq,
+        .not_eq => .not_eq,
+        else => error.UnsupportedInfixToken,
+    };
+}
 
 pub const If = struct {
     token: Token,

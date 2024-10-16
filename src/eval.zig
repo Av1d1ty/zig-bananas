@@ -24,7 +24,8 @@ pub const Evaluator = struct {
                 .bool => |bool_| if (bool_.value) obj.TRUE else obj.FALSE,
                 .pref => |pref| blk: {
                     const right = try self.eval(Node{ .expression = pref.right });
-                    break :blk switch (pref.token) {
+                    // TODO: store operators in a separate union, so that this `else` won't be needed
+                    break :blk switch (pref.operator) {
                         .bang => switch (right.*) {
                             .bool => if (right == obj.FALSE) obj.TRUE else obj.FALSE,
                             .null => obj.TRUE,
@@ -36,7 +37,20 @@ pub const Evaluator = struct {
                             ),
                             else => error.InvalidPrefixOperand,
                         },
-                        else => unreachable,
+                    };
+                },
+                .inf => |inf| blk: {
+                    // const left = try self.eval(Node{ .expression = inf.left });
+                    // const right = try self.eval(Node{ .expression = inf.right });
+                    break :blk switch (inf.operator) {
+                        .plus => error.Unimplemented,
+                        .minus => error.Unimplemented,
+                        .asterisk => error.Unimplemented,
+                        .slash => error.Unimplemented,
+                        .gt => error.Unimplemented,
+                        .lt => error.Unimplemented,
+                        .eq => error.Unimplemented,
+                        .not_eq => error.Unimplemented,
                     };
                 },
                 else => unreachable,
@@ -49,6 +63,19 @@ pub const Evaluator = struct {
         ptr.* = object;
         return ptr;
     }
+
+    // fn eval_prefix_expr(
+    //     self: @This(),
+    //     operator: ast.Operator,
+    //     left: *const obj.Object,
+    // ) !*const obj.Object {}
+
+    // fn eval_infix_expr(
+    //     self: @This(),
+    //     operator: ast.Operator,
+    //     left: *const obj.Object,
+    //     right: *const obj.Object,
+    // ) !*const obj.Object {}
 };
 
 fn test_eval(input: []const u8) !obj.Object {
