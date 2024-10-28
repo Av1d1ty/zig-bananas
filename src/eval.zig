@@ -2,6 +2,7 @@ const std = @import("std");
 const Lexer = @import("lexer.zig").Lexer;
 const Parser = @import("parser.zig").Parser;
 const Node = @import("ast.zig").Node;
+const ast = @import("ast.zig");
 const obj = @import("object.zig");
 
 pub const Evaluator = struct {
@@ -24,7 +25,6 @@ pub const Evaluator = struct {
                 .bool => |bool_| if (bool_.value) obj.TRUE else obj.FALSE,
                 .pref => |pref| blk: {
                     const right = try self.eval(Node{ .expression = pref.right });
-                    // TODO: store operators in a separate union, so that this `else` won't be needed
                     break :blk switch (pref.operator) {
                         .bang => switch (right.*) {
                             .bool => if (right == obj.FALSE) obj.TRUE else obj.FALSE,
@@ -40,22 +40,43 @@ pub const Evaluator = struct {
                     };
                 },
                 .inf => |inf| blk: {
-                    // const left = try self.eval(Node{ .expression = inf.left });
-                    // const right = try self.eval(Node{ .expression = inf.right });
-                    break :blk switch (inf.operator) {
-                        .plus => error.Unimplemented,
-                        .minus => error.Unimplemented,
-                        .asterisk => error.Unimplemented,
-                        .slash => error.Unimplemented,
-                        .gt => error.Unimplemented,
-                        .lt => error.Unimplemented,
-                        .eq => error.Unimplemented,
-                        .not_eq => error.Unimplemented,
+                    const left = try self.eval(Node{ .expression = inf.left });
+                    const right = try self.eval(Node{ .expression = inf.right });
+                    break :blk switch (left.*) {
+                        // .bool => |l_bool| if (right == .bool) self.eval_infix_int(inf.operator, l_bool, right.bool) else error.InvalidOperand,
+                        .int => |l_int| if (right.* == .int) self.eval_infix_int(inf.operator, l_int, right.int) else  error.InvalidOperand,
+                        else => error.Unimplemented,
                     };
+
+                    // break :blk switch (inf.operator) {
+                    //     .plus => error.Unimplemented,
+                    //     .minus => error.Unimplemented,
+                    //     .asterisk => error.Unimplemented,
+                    //     .slash => error.Unimplemented,
+                    //     .gt => error.Unimplemented,
+                    //     .lt => error.Unimplemented,
+                    //     .eq => error.Unimplemented,
+                    //     .not_eq => error.Unimplemented,
+                    // };
                 },
-                else => unreachable,
+                else => error.Unimplemented,
             },
         };
+    }
+
+    // TODO: add tests
+    fn eval_infix_int(self: @This(), op: ast.InfixOperator, left: obj.Integer, right: obj.Integer) !*const obj.Object {
+        const value = switch (op) {
+            .plus => left.value + right.value,
+            .minus => left.value - right.value,
+            .asterisk => left.value * right.value,
+            .slash => if (right.value != 0) @divTrunc(left.value, right.value) else return error.DivisionByZero,
+            .gt => return if (left.value > right.value) obj.TRUE else obj.FALSE,
+            .lt => return if (left.value < right.value) obj.TRUE else obj.FALSE,
+            .eq => return if (left.value == right.value) obj.TRUE else obj.FALSE,
+            .not_eq => return if (left.value != right.value) obj.TRUE else obj.FALSE,
+        };
+        return self.alloc_obj(obj.Object{ .int = obj.Integer{.value = value} });
     }
 
     fn alloc_obj(self: @This(), object: obj.Object) *const obj.Object {
