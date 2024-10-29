@@ -44,7 +44,7 @@ pub const Evaluator = struct {
                     const right = try self.eval(Node{ .expression = inf.right });
                     break :blk switch (left.*) {
                         // .bool => |l_bool| if (right == .bool) self.eval_infix_int(inf.operator, l_bool, right.bool) else error.InvalidOperand,
-                        .int => |l_int| if (right.* == .int) self.eval_infix_int(inf.operator, l_int, right.int) else  error.InvalidOperand,
+                        .int => |l_int| if (right.* == .int) self.eval_infix_int(inf.operator, l_int, right.int) else error.InvalidOperand,
                         else => error.Unimplemented,
                     };
 
@@ -76,7 +76,7 @@ pub const Evaluator = struct {
             .eq => return if (left.value == right.value) obj.TRUE else obj.FALSE,
             .not_eq => return if (left.value != right.value) obj.TRUE else obj.FALSE,
         };
-        return self.alloc_obj(obj.Object{ .int = obj.Integer{.value = value} });
+        return self.alloc_obj(obj.Object{ .int = obj.Integer{ .value = value } });
     }
 
     fn alloc_obj(self: @This(), object: obj.Object) *const obj.Object {
@@ -84,19 +84,6 @@ pub const Evaluator = struct {
         ptr.* = object;
         return ptr;
     }
-
-    // fn eval_prefix_expr(
-    //     self: @This(),
-    //     operator: ast.Operator,
-    //     left: *const obj.Object,
-    // ) !*const obj.Object {}
-
-    // fn eval_infix_expr(
-    //     self: @This(),
-    //     operator: ast.Operator,
-    //     left: *const obj.Object,
-    //     right: *const obj.Object,
-    // ) !*const obj.Object {}
 };
 
 fn test_eval(input: []const u8) !obj.Object {
@@ -117,23 +104,40 @@ fn test_eval(input: []const u8) !obj.Object {
 test "integer" {
     const cases = [_]struct {
         input: []const u8,
-        expected: i64,
+        expected: union { int: i64, boolean: bool },
     }{
-        .{ .input = "5", .expected = 5 },
-        .{ .input = "10", .expected = 10 },
-        .{ .input = "-5", .expected = -5 },
-        .{ .input = "-10", .expected = -10 },
+        .{ .input = "5", .expected = .{ .int = 5 } },
+        .{ .input = "10", .expected = .{ .int = 10 } },
+        .{ .input = "-5", .expected = .{ .int = -5 } },
+        .{ .input = "-10", .expected = .{ .int = -10 } },
+        .{ .input = "9 > 7", .expected = .{ .boolean = true } },
+        .{ .input = "9 < 7", .expected = .{ .boolean = false } },
+        .{ .input = "7 > 9", .expected = .{ .boolean = false } },
+        .{ .input = "7 < 9", .expected = .{ .boolean = true } },
+        .{ .input = "9 == 7", .expected = .{ .boolean = false } },
+        .{ .input = "9 == 9", .expected = .{ .boolean = true } },
+        .{ .input = "5 + 5 + 5 + 5 - 10", .expected = .{ .int = 10 } },
+        .{ .input = "2 * 2 * 2 * 2 * 2", .expected = .{ .int = 32 } },
+        .{ .input = "-50 + 100 + -50", .expected = .{ .int = 0 } },
+        .{ .input = "5 * 2 + 10", .expected = .{ .int = 20 } },
+        .{ .input = "5 + 2 * 10", .expected = .{ .int = 25 } },
+        .{ .input = "20 + 2 * -10", .expected = .{ .int = 0 } },
+        .{ .input = "50 / 2 * 2 + 10", .expected = .{ .int = 60 } },
+        .{ .input = "2 * (5 + 10)", .expected = .{ .int = 30 } },
+        .{ .input = "3 * 3 * 3 + 10", .expected = .{ .int = 37 } },
+        .{ .input = "3 * (3 * 3) + 10", .expected = .{ .int = 37 } },
+        .{ .input = "(5 + 10 * 2 + 15 / 3) * 2 + -10", .expected = .{ .int = 50 } },
     };
     for (cases) |case| {
         const result = try test_eval(case.input);
         switch (result) {
-            .int => |actual| try std.testing.expectEqual(case.expected, actual.value),
+            .int => |actual| try std.testing.expectEqual(case.expected.int, actual.value),
+            .bool => |actual| try std.testing.expectEqual(case.expected.boolean, actual.value),
             inline else => |actual| {
-                std.log.err("\nExpected INT, got {}\n", .{actual});
+                std.log.err("\nExpected INT or BOOL, got {}\n", .{actual});
                 return error.UnexpectedObjectType;
             },
         }
-        // std.debug.print("\nint: {d}", .{(try test_eval(case.input)).int.value});
     }
 }
 
