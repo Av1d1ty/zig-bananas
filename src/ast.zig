@@ -43,7 +43,7 @@ pub const Expression = union(enum) {
             .int => |int| writer.print("{d}", .{int.value}),
             .bool => |boolean| writer.print("{}", .{boolean.value}),
             .pref => |pref| writer.print("({}{})", .{ pref.operator, pref.right }),
-            .inf => |inf| writer.print("({} {} {})", .{ inf.left, inf.token, inf.right }),
+            .inf => |inf| writer.print("({} {} {})", .{ inf.left, inf.operator, inf.right }),
             .if_exp => |if_exp| blk: {
                 if (if_exp.alternative) |alt| {
                     break :blk writer.print(

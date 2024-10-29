@@ -485,7 +485,7 @@ test "let_statements" {
                 .value = "y",
             },
             .value = &(ast.Expression{ .inf = .{
-                .token = .plus,
+                .operator  = .plus,
                 .left = &(ast.Expression{ .int = ast.Integer{ .value = 1, .token = .{ .int = "1" } } }),
                 .right = &(ast.Expression{ .ident = ast.Identifier{ .token = .{ .ident = "b" }, .value = "b" } }),
             } }),
@@ -497,7 +497,7 @@ test "let_statements" {
                 .value = "foobar",
             },
             .value = &(ast.Expression{ .inf = .{
-                .token = .slash,
+                .operator  = .slash,
                 .left = &(ast.Expression{ .ident = ast.Identifier{ .token = .{ .ident = "x" }, .value = "x" } }),
                 .right = &(ast.Expression{ .ident = ast.Identifier{ .token = .{ .ident = "y" }, .value = "y" } }),
             } }),
@@ -540,7 +540,7 @@ test "return_statements" {
         ast.ReturnStatement{
             .token = .return_token,
             .value = &(ast.Expression{ .inf = .{
-                .token = .plus,
+                .operator = .plus,
                 .left = &(ast.Expression{ .int = ast.Integer{ .value = 1, .token = .{ .int = "1" } } }),
                 .right = &(ast.Expression{ .ident = ast.Identifier{ .token = .{ .ident = "b" }, .value = "b" } }),
             } }),
@@ -626,7 +626,7 @@ test "infix" {
     const tokens = [_]Token{ .plus, .minus, .asterisk, .slash, .gt, .lt, .eq, .not_eq };
     inline for (0..8, tokens) |i, token| {
         cases[i] = ast.Infix{
-            .token = token,
+            .operator = try ast.infix_operator_from_token(token),
             .left = &(ast.Expression{ .int = .{ .token = .{ .int = "5" }, .value = 5 } }),
             .right = &(ast.Expression{ .int = .{ .token = .{ .int = "5" }, .value = 5 } }),
         };
@@ -665,7 +665,7 @@ test "if" {
     }{
         .{
             .condition = &(ast.Expression{ .inf = .{
-                .token = .lt,
+                .operator = .lt,
                 .left = &(ast.Expression{ .ident = .{ .token = .{ .ident = "x" }, .value = "x" } }),
                 .right = &(ast.Expression{ .ident = .{ .token = .{ .ident = "y" }, .value = "y" } }),
             } }),
@@ -674,7 +674,7 @@ test "if" {
         },
         .{
             .condition = &(ast.Expression{ .inf = .{
-                .token = .lt,
+                .operator = .lt,
                 .left = &(ast.Expression{ .ident = .{ .token = .{ .ident = "len" }, .value = "len" } }),
                 .right = &(ast.Expression{ .int = .{ .token = .{ .int = "1" }, .value = 1 } }),
             } }),
