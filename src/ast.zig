@@ -117,7 +117,20 @@ pub const Prefix = struct {
     right: *const Expression,
 };
 
-pub const PrefixOperator = union(enum) { bang, minus };
+pub const PrefixOperator = union(enum) {
+    bang,
+    minus,
+
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
+        const string = switch (self) {
+            .minus => "-",
+            .bang => "!",
+        };
+        return writer.print("{s}", .{string});
+    }
+};
 
 pub const Infix = struct {
     operator: InfixOperator,
@@ -125,7 +138,32 @@ pub const Infix = struct {
     right: *const Expression,
 };
 
-pub const InfixOperator = union(enum) { plus, minus, asterisk, slash, gt, lt, eq, not_eq };
+pub const InfixOperator = union(enum) {
+    plus,
+    minus,
+    asterisk,
+    slash,
+    gt,
+    lt,
+    eq,
+    not_eq,
+
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
+        const string = switch (self) {
+            .plus => "+",
+            .minus => "-",
+            .asterisk => "*",
+            .slash => "/",
+            .lt => "<",
+            .gt => ">",
+            .eq => "==",
+            .not_eq => "!=",
+        };
+        return writer.print("{s}", .{string});
+    }
+};
 
 pub fn infix_operator_from_token(token: Token) error{UnsupportedInfixToken}!InfixOperator {
     return switch (token) {
