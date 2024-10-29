@@ -116,6 +116,8 @@ test "integer" {
         .{ .input = "7 < 9", .expected = .{ .boolean = true } },
         .{ .input = "9 == 7", .expected = .{ .boolean = false } },
         .{ .input = "9 == 9", .expected = .{ .boolean = true } },
+        .{ .input = "9 != 9", .expected = .{ .boolean = false } },
+        .{ .input = "9 != 7", .expected = .{ .boolean = true } },
         .{ .input = "5 + 5 + 5 + 5 - 10", .expected = .{ .int = 10 } },
         .{ .input = "2 * 2 * 2 * 2 * 2", .expected = .{ .int = 32 } },
         .{ .input = "-50 + 100 + -50", .expected = .{ .int = 0 } },
