@@ -39,7 +39,7 @@ pub const Token = union(enum) {
     return_token,
 
     pub fn lookup_ident(ident: []const u8) Token {
-        const map = std.ComptimeStringMap(Token, .{
+        const map = std.StaticStringMap(Token).initComptime(.{
             .{ "let", .let },
             .{ "fn", .function },
             .{ "if", .if_token },

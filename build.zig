@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
     //     .name = "zig-monk",
     //     // In this case the main source file is merely a path, however, in more
     //     // complicated build scripts, this could be a generated file.
-    //     .root_source_file = .{ .path = "src/root.zig" },
+    //     .root_source_file = b.path("src/root.zig" },
     //     .target = target,
     //     .optimize = optimize,
     // });
@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "zig-monk",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -67,13 +67,13 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const parser_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/parser.zig" },
+        .root_source_file = b.path("src/parser.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const ast_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/ast.zig" },
+        .root_source_file = b.path("src/ast.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -82,7 +82,7 @@ pub fn build(b: *std.Build) void {
     const run_ast_unit_tests = b.addRunArtifact(ast_unit_tests);
 
     const exe_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
