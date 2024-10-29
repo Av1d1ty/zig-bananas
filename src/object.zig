@@ -21,7 +21,7 @@ pub const Object = union(enum) {
 
 const Null = struct {};
 
-const Boolean = struct {
+pub const Boolean = struct {
     value: bool,
 };
 

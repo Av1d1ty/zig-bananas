@@ -113,7 +113,7 @@ pub const Boolean = struct {
 };
 
 pub const Prefix = struct {
-    operator: PrefixOperator, // The prefix token, e.g. `!`
+    operator: PrefixOperator,
     right: *const Expression,
 };
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const assert = @import("std").debug.assert;
 const Lexer = @import("lexer.zig").Lexer;
 const Parser = @import("parser.zig").Parser;
 const Node = @import("ast.zig").Node;
@@ -43,28 +44,16 @@ pub const Evaluator = struct {
                     const left = try self.eval(Node{ .expression = inf.left });
                     const right = try self.eval(Node{ .expression = inf.right });
                     break :blk switch (left.*) {
-                        // .bool => |l_bool| if (right == .bool) self.eval_infix_int(inf.operator, l_bool, right.bool) else error.InvalidOperand,
+                        .bool => if (right.* == .bool) eval_infix_bool(inf.operator, left, right) else error.InvalidOperand,
                         .int => |l_int| if (right.* == .int) self.eval_infix_int(inf.operator, l_int, right.int) else error.InvalidOperand,
-                        else => error.Unimplemented,
+                        else => error.UnsupportedInfixOperation,
                     };
-
-                    // break :blk switch (inf.operator) {
-                    //     .plus => error.Unimplemented,
-                    //     .minus => error.Unimplemented,
-                    //     .asterisk => error.Unimplemented,
-                    //     .slash => error.Unimplemented,
-                    //     .gt => error.Unimplemented,
-                    //     .lt => error.Unimplemented,
-                    //     .eq => error.Unimplemented,
-                    //     .not_eq => error.Unimplemented,
-                    // };
                 },
                 else => error.Unimplemented,
             },
         };
     }
 
-    // TODO: add tests
     fn eval_infix_int(self: @This(), op: ast.InfixOperator, left: obj.Integer, right: obj.Integer) !*const obj.Object {
         const value = switch (op) {
             .plus => left.value + right.value,
@@ -85,6 +74,22 @@ pub const Evaluator = struct {
         return ptr;
     }
 };
+
+fn eval_infix_bool(op: ast.InfixOperator, left: *const obj.Object, right: *const obj.Object) !*const obj.Object {
+    assert(left == obj.TRUE or left == obj.FALSE);
+    assert(right == obj.TRUE or right == obj.FALSE);
+    return switch (op) {
+        .eq => if (left == right) obj.TRUE else obj.FALSE,
+        .not_eq => if (left != right) obj.TRUE else obj.FALSE,
+        .plus,
+        .minus,
+        .asterisk,
+        .slash,
+        .lt,
+        .gt,
+        => error.UnsupportedOperator,
+    };
+}
 
 fn test_eval(input: []const u8) !obj.Object {
     var lexer = Lexer.init(input);
@@ -136,7 +141,7 @@ test "integer" {
             .int => |actual| try std.testing.expectEqual(case.expected.int, actual.value),
             .bool => |actual| try std.testing.expectEqual(case.expected.boolean, actual.value),
             inline else => |actual| {
-                std.log.err("\nExpected INT or BOOL, got {}\n", .{actual});
+                std.log.err("\nExpected int or bool, got {}\n", .{actual});
                 return error.UnexpectedObjectType;
             },
         }
@@ -150,6 +155,14 @@ test "boolean" {
     }{
         .{ .input = "true", .expected = true },
         .{ .input = "false", .expected = false },
+        .{ .input = "false == false", .expected = true },
+        .{ .input = "true == false", .expected = false },
+        .{ .input = "true != false", .expected = true },
+        .{ .input = "false != true", .expected = true },
+        .{ .input = "(1 < 2) == true", .expected = true },
+        .{ .input = "(1 < 2) == false", .expected = false },
+        .{ .input = "(1 > 2) == true", .expected = false },
+        .{ .input = "(1 > 2) == false", .expected = true },
     };
     for (cases) |case| {
         const result = try test_eval(case.input);
