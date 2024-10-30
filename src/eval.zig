@@ -1,29 +1,25 @@
 const std = @import("std");
-const assert = @import("std").debug.assert;
-const Lexer = @import("lexer.zig").Lexer;
-const Parser = @import("parser.zig").Parser;
-const Node = @import("ast.zig").Node;
 const ast = @import("ast.zig");
 const obj = @import("object.zig");
+const Lexer = @import("lexer.zig").Lexer;
+const Parser = @import("parser.zig").Parser;
+const Node = ast.Node;
+const assert = std.debug.assert;
 
 pub const Evaluator = struct {
     allocator: std.mem.Allocator,
 
     pub fn eval(self: @This(), node: Node) !*const obj.Object {
         return switch (node) {
-            .program => |prog| blk: {
-                var result = obj.NULL;
-                for (prog.statements) |stmt| result = try self.eval(Node{ .statement = stmt });
-                // std.debug.print("\nresult: {}\n", .{result});
-                break :blk result;
-            },
+            .program => |prog| self.eval_statements(prog.statements),
             .statement => |stmt| switch (stmt) {
                 .exp => |exp| try self.eval(Node{ .expression = exp.expression }),
+                .blk => |blk| try self.eval_statements(blk.statements),
                 else => unreachable,
             },
             .expression => |expr| switch (expr.*) {
                 .int => |int| self.alloc_obj(obj.Object{ .int = obj.Integer{ .value = int.value } }),
-                .bool => |bool_| if (bool_.value) obj.TRUE else obj.FALSE,
+                .bool => |boolean| if (boolean.value) obj.TRUE else obj.FALSE,
                 .pref => |pref| blk: {
                     const right = try self.eval(Node{ .expression = pref.right });
                     break :blk switch (pref.operator) {
@@ -49,9 +45,25 @@ pub const Evaluator = struct {
                         else => error.UnsupportedInfixOperation,
                     };
                 },
+                .if_exp => |if_exp| blk: {
+                    const evaluated_condition = try self.eval(Node{ .expression = if_exp.condition });
+                    if (is_truthy(evaluated_condition)) {
+                        break :blk try self.eval(Node{ .statement = .{ .blk = if_exp.consequence } });
+                    } else if (if_exp.alternative) |alternative| {
+                        break :blk try self.eval(Node{ .statement = .{ .blk = alternative } });
+                    } else {
+                        break :blk obj.NULL;
+                    }
+                },
                 else => error.Unimplemented,
             },
         };
+    }
+
+    fn eval_statements(self: @This(), statements: []ast.Statement) anyerror!*const obj.Object {
+        var result = obj.NULL;
+        for (statements) |stmt| result = try self.eval(Node{ .statement = stmt });
+        return result;
     }
 
     fn eval_infix_int(self: @This(), op: ast.InfixOperator, left: obj.Integer, right: obj.Integer) !*const obj.Object {
@@ -88,6 +100,14 @@ fn eval_infix_bool(op: ast.InfixOperator, left: *const obj.Object, right: *const
         .lt,
         .gt,
         => error.UnsupportedOperator,
+    };
+}
+
+fn is_truthy(object: *const obj.Object) bool {
+    return switch (object.*) {
+        .int => |int| int.value != 0,
+        .bool => object == obj.TRUE,
+        .null => false,
     };
 }
 
@@ -169,7 +189,7 @@ test "boolean" {
         switch (result) {
             .bool => |actual| try std.testing.expectEqual(case.expected, actual.value),
             inline else => |actual| {
-                std.log.err("\nExpected BOOL, got {}\n", .{actual});
+                std.log.err("\nExpected bool, got {}\n", .{actual});
                 return error.UnexpectedObjectType;
             },
         }
@@ -191,7 +211,33 @@ test "bang" {
         switch (result) {
             .bool => |actual| try std.testing.expectEqual(case.expected, actual.value),
             inline else => |actual| {
-                std.log.err("\nExpected BOOL, got {}\n", .{actual});
+                std.log.err("\nExpected bool, got {}\n", .{actual});
+                return error.UnexpectedObjectType;
+            },
+        }
+    }
+}
+
+test "if_else" {
+    const cases = [_]struct {
+        input: []const u8,
+        expected: obj.Object,
+    }{
+        .{ .input = "if (true) { 10 }", .expected = .{ .int = .{ .value = 10 } } },
+        .{ .input = "if (false) { 10 }", .expected = .{ .null = .{}} },
+        .{ .input = "if (1) { 10 }", .expected = .{ .int = .{ .value = 10 }} },
+        .{ .input = "if (1 < 2) { 10 }", .expected = .{ .int = .{ .value = 10 }} },
+        .{ .input = "if (1 > 2) { 10 }", .expected = .{ .null = .{}} },
+        .{ .input = "if (1 > 2) { 10 } else { 20 }", .expected = .{ .int = .{ .value = 20 }} },
+        .{ .input = "if (1 < 2) { 10 } else { 20 }", .expected = .{ .int = .{ .value = 10 }} },
+    };
+    for (cases) |case| {
+        const result = try test_eval(case.input);
+        switch (result) {
+            .int => |actual| try std.testing.expectEqual(case.expected.int.value, actual.value),
+            .null => try std.testing.expect(case.expected == .null),
+            inline else => |actual| {
+                std.log.err("\nExpected int or null, got {}\n", .{actual});
                 return error.UnexpectedObjectType;
             },
         }
