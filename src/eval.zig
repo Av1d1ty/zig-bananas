@@ -8,14 +8,16 @@ const assert = std.debug.assert;
 
 pub const Evaluator = struct {
     allocator: std.mem.Allocator,
+    is_returning: bool = false,
 
-    pub fn eval(self: @This(), node: Node) !*const obj.Object {
+    pub fn eval(self: *@This(), node: Node) !*const obj.Object {
         return switch (node) {
             .program => |prog| self.eval_statements(prog.statements),
             .statement => |stmt| switch (stmt) {
-                .exp => |exp| try self.eval(Node{ .expression = exp.expression }),
                 .blk => |blk| try self.eval_statements(blk.statements),
-                else => unreachable,
+                .exp => |exp| try self.eval(Node{ .expression = exp.expression }),
+                .ret => |ret| if (ret.value) |val| try self.eval(Node{ .expression = val }) else obj.NULL,
+                else => error.Unimplemented,
             },
             .expression => |expr| switch (expr.*) {
                 .int => |int| self.alloc_obj(obj.Object{ .int = obj.Integer{ .value = int.value } }),
@@ -60,9 +62,13 @@ pub const Evaluator = struct {
         };
     }
 
-    fn eval_statements(self: @This(), statements: []ast.Statement) anyerror!*const obj.Object {
+    fn eval_statements(self: *@This(), statements: []ast.Statement) anyerror!*const obj.Object {
         var result = obj.NULL;
-        for (statements) |stmt| result = try self.eval(Node{ .statement = stmt });
+        for (statements) |stmt| {
+            result = try self.eval(Node{ .statement = stmt });
+            if (stmt == .ret) self.is_returning = true;
+            if (self.is_returning) return result;
+        }
         return result;
     }
 
@@ -224,12 +230,12 @@ test "if_else" {
         expected: obj.Object,
     }{
         .{ .input = "if (true) { 10 }", .expected = .{ .int = .{ .value = 10 } } },
-        .{ .input = "if (false) { 10 }", .expected = .{ .null = .{}} },
-        .{ .input = "if (1) { 10 }", .expected = .{ .int = .{ .value = 10 }} },
-        .{ .input = "if (1 < 2) { 10 }", .expected = .{ .int = .{ .value = 10 }} },
-        .{ .input = "if (1 > 2) { 10 }", .expected = .{ .null = .{}} },
-        .{ .input = "if (1 > 2) { 10 } else { 20 }", .expected = .{ .int = .{ .value = 20 }} },
-        .{ .input = "if (1 < 2) { 10 } else { 20 }", .expected = .{ .int = .{ .value = 10 }} },
+        .{ .input = "if (false) { 10 }", .expected = .{ .null = .{} } },
+        .{ .input = "if (1) { 10 }", .expected = .{ .int = .{ .value = 10 } } },
+        .{ .input = "if (1 < 2) { 10 }", .expected = .{ .int = .{ .value = 10 } } },
+        .{ .input = "if (1 > 2) { 10 }", .expected = .{ .null = .{} } },
+        .{ .input = "if (1 > 2) { 10 } else { 20 }", .expected = .{ .int = .{ .value = 20 } } },
+        .{ .input = "if (1 < 2) { 10 } else { 20 }", .expected = .{ .int = .{ .value = 10 } } },
     };
     for (cases) |case| {
         const result = try test_eval(case.input);
@@ -238,6 +244,28 @@ test "if_else" {
             .null => try std.testing.expect(case.expected == .null),
             inline else => |actual| {
                 std.log.err("\nExpected int or null, got {}\n", .{actual});
+                return error.UnexpectedObjectType;
+            },
+        }
+    }
+}
+
+test "return" {
+    const cases = [_]struct {
+        input: []const u8,
+        expected: obj.Object,
+    }{
+        .{ .input = "return 10;", .expected = .{ .int = .{ .value = 10 } } },
+        .{ .input = "return 10; 9;", .expected = .{ .int = .{ .value = 10 } } },
+        .{ .input = "return 2 * 5; 9", .expected = .{ .int = .{ .value = 10 } } },
+        .{ .input = "9; return 2 * 5; 9;", .expected = .{ .int = .{ .value = 10 } } },
+    };
+    for (cases) |case| {
+        const result = try test_eval(case.input);
+        switch (result) {
+            .int => |actual| try std.testing.expectEqual(case.expected.int.value, actual.value),
+            inline else => |actual| {
+                std.log.err("\nExpected int, got {}\n", .{actual});
                 return error.UnexpectedObjectType;
             },
         }
