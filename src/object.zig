@@ -28,3 +28,26 @@ pub const Boolean = struct {
 pub const Integer = struct {
     value: i64,
 };
+
+pub const Environment = struct {
+    outer: ?*const Environment = null,
+    store: std.StringHashMap(*const Object),
+
+    pub fn init(allocator: std.mem.Allocator) Environment {
+        const store = std.StringHashMap(*const Object).init(allocator);
+        return Environment{ .store = store };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.store.deinit();
+    }
+
+    pub fn get(self: *const @This(), key: []const u8) ?*const Object {
+        const value = self.store.get(key);
+        return value orelse if (self.outer) |outer| outer.get(key) else value;
+    }
+
+    pub fn put(self: *@This(), key: []const u8, val: *const Object) void {
+        self.store.put(key, val) catch unreachable;
+    }
+};

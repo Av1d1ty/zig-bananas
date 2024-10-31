@@ -4,8 +4,9 @@ const Lexer = @import("lexer.zig").Lexer;
 const Parser = @import("parser.zig").Parser;
 const Node = @import("ast.zig").Node;
 const Evaluator = @import("eval.zig").Evaluator;
+const Environment = @import("object.zig").Environment;
 
-const prompt = "λ ";
+const prompt = "↯ ";
 
 pub fn start() !void {
     const stdin = std.io.getStdIn().reader();
@@ -15,11 +16,15 @@ pub fn start() !void {
     defer arena.deinit();
     const alloc = arena.allocator();
 
+    var env = Environment.init(alloc);
+    defer env.deinit();
+
     while (true) {
         _ = try stdout.write(prompt);
         const maybe_input = try stdin.readUntilDelimiterOrEofAlloc(alloc, '\n', 100);
         if (maybe_input) |input| {
             defer alloc.free(input);
+
             var lexer = Lexer.init(input);
 
             var parser = Parser.init(&lexer, alloc);
@@ -29,7 +34,7 @@ pub fn start() !void {
             defer program.deinit();
 
             var evaluator = Evaluator{ .allocator = alloc };
-            const eval_result = evaluator.eval(Node{ .program = &program });
+            const eval_result = evaluator.eval(Node{ .program = &program }, &env);
             try stdout.print("{!}\n", .{eval_result});
         }
     }

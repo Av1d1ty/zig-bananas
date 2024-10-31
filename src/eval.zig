@@ -10,20 +10,25 @@ pub const Evaluator = struct {
     allocator: std.mem.Allocator,
     is_returning: bool = false,
 
-    pub fn eval(self: *@This(), node: Node) !*const obj.Object {
+    pub fn eval(self: *@This(), node: Node, env: *obj.Environment) !*const obj.Object {
         return switch (node) {
-            .program => |prog| self.eval_statements(prog.statements),
+            .program => |prog| self.eval_statements(prog.statements, env),
             .statement => |stmt| switch (stmt) {
-                .blk => |blk| try self.eval_statements(blk.statements),
-                .exp => |exp| try self.eval(Node{ .expression = exp.expression }),
-                .ret => |ret| if (ret.value) |val| try self.eval(Node{ .expression = val }) else obj.NULL,
-                else => error.Unimplemented,
+                .blk => |blk| try self.eval_statements(blk.statements, env),
+                .exp => |exp| try self.eval(Node{ .expression = exp.expression }, env),
+                .ret => |ret| if (ret.value) |val| try self.eval(Node{ .expression = val }, env) else obj.NULL,
+                .let => |let| blk: {
+                    const val = try self.eval(Node{ .expression = let.value }, env);
+                    const name = self.allocator.dupe(u8, let.name.value) catch unreachable;
+                    env.put(name, val);
+                    break :blk obj.NULL;
+                },
             },
             .expression => |expr| switch (expr.*) {
                 .int => |int| self.alloc_obj(obj.Object{ .int = obj.Integer{ .value = int.value } }),
                 .bool => |boolean| if (boolean.value) obj.TRUE else obj.FALSE,
                 .pref => |pref| blk: {
-                    const right = try self.eval(Node{ .expression = pref.right });
+                    const right = try self.eval(Node{ .expression = pref.right }, env);
                     break :blk switch (pref.operator) {
                         .bang => switch (right.*) {
                             .bool => if (right == obj.FALSE) obj.TRUE else obj.FALSE,
@@ -39,8 +44,8 @@ pub const Evaluator = struct {
                     };
                 },
                 .inf => |inf| blk: {
-                    const left = try self.eval(Node{ .expression = inf.left });
-                    const right = try self.eval(Node{ .expression = inf.right });
+                    const left = try self.eval(Node{ .expression = inf.left }, env);
+                    const right = try self.eval(Node{ .expression = inf.right }, env);
                     break :blk switch (left.*) {
                         .bool => if (right.* == .bool) eval_infix_bool(inf.operator, left, right) else error.InvalidOperand,
                         .int => |l_int| if (right.* == .int) self.eval_infix_int(inf.operator, l_int, right.int) else error.InvalidOperand,
@@ -48,24 +53,26 @@ pub const Evaluator = struct {
                     };
                 },
                 .if_exp => |if_exp| blk: {
-                    const evaluated_condition = try self.eval(Node{ .expression = if_exp.condition });
+                    const evaluated_condition = try self.eval(Node{ .expression = if_exp.condition }, env);
                     if (is_truthy(evaluated_condition)) {
-                        break :blk try self.eval(Node{ .statement = .{ .blk = if_exp.consequence } });
+                        break :blk try self.eval(Node{ .statement = .{ .blk = if_exp.consequence } }, env);
                     } else if (if_exp.alternative) |alternative| {
-                        break :blk try self.eval(Node{ .statement = .{ .blk = alternative } });
+                        break :blk try self.eval(Node{ .statement = .{ .blk = alternative } }, env);
                     } else {
                         break :blk obj.NULL;
                     }
                 },
-                else => error.Unimplemented,
+                .ident => |ident| env.get(ident.value) orelse error.UnboundIdentifier,
+                .func => error.Unimplemented,
+                .call => error.Unimplemented,
             },
         };
     }
 
-    fn eval_statements(self: *@This(), statements: []ast.Statement) anyerror!*const obj.Object {
+    fn eval_statements(self: *@This(), statements: []ast.Statement, env: *obj.Environment) anyerror!*const obj.Object {
         var result = obj.NULL;
         for (statements) |stmt| {
-            result = try self.eval(Node{ .statement = stmt });
+            result = try self.eval(Node{ .statement = stmt }, env);
             if (stmt == .ret) self.is_returning = true;
             if (self.is_returning) return result;
         }
@@ -123,12 +130,14 @@ fn test_eval(input: []const u8) !obj.Object {
     var program = try parser.parse_program();
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     var evaluator = Evaluator{ .allocator = arena.allocator() };
+    var env = obj.Environment.init(arena.allocator());
 
     defer parser.deinit();
     defer program.deinit();
     defer arena.deinit();
+    defer env.deinit();
 
-    const eval_result = try evaluator.eval(Node{ .program = &program });
+    const eval_result = try evaluator.eval(Node{ .program = &program }, &env);
     return eval_result.*;
 }
 
@@ -259,6 +268,30 @@ test "return" {
         .{ .input = "return 10; 9;", .expected = .{ .int = .{ .value = 10 } } },
         .{ .input = "return 2 * 5; 9", .expected = .{ .int = .{ .value = 10 } } },
         .{ .input = "9; return 2 * 5; 9;", .expected = .{ .int = .{ .value = 10 } } },
+        .{ .input = "if (10 > 1) { if (10 > 1) { return 10; } return 1; }", .expected = .{ .int = .{ .value = 10 } } },
+    };
+    for (cases) |case| {
+        const result = try test_eval(case.input);
+        switch (result) {
+            .int => |actual| try std.testing.expectEqual(case.expected.int.value, actual.value),
+            inline else => |actual| {
+                std.log.err("\nExpected int, got {}\n", .{actual});
+                return error.UnexpectedObjectType;
+            },
+        }
+    }
+}
+
+test "let" {
+    // TODO: test errors
+    const cases = [_]struct {
+        input: []const u8,
+        expected: obj.Object,
+    }{
+        .{ .input = "let a = 5; a;", .expected = .{ .int = .{ .value = 5 } } },
+        .{ .input = "let a = 5 * 5; a;", .expected = .{ .int = .{ .value = 25 } } },
+        .{ .input = "let a = 5; let b = a; b;", .expected = .{ .int = .{ .value = 5 } } },
+        .{ .input = "let a = 5; let b = a; let c = a + b + 5; c;", .expected = .{ .int = .{ .value = 15 } } },
     };
     for (cases) |case| {
         const result = try test_eval(case.input);
