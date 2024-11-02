@@ -69,9 +69,39 @@ pub const Evaluator = struct {
                     .body = func.body,
                     .env = env,
                 } }),
-                .call => error.Unimplemented,
+                .call => |call| blk: {
+                    const func_obj = try switch (call.func) {
+                        .ident => |ident| env.get(ident.value) orelse error.UnboundIdentifier,
+                        .func => |func| self.alloc_obj(obj.Object{ .func = obj.Function{
+                            .parameters = func.parameters,
+                            .body = func.body,
+                            .env = env,
+                        } }),
+                    };
+                    // Parser ensures that this AST object resolves only to functions
+                    const func = func_obj.func;
+                    if (func.parameters.len != call.arguments.len) return error.ArgumentCountMismatch;
+                    var args_array = std.ArrayList(*const obj.Object).init(self.allocator);
+                    for (call.arguments) |arg| {
+                        const arg_val = try self.eval(Node{ .expression = &arg }, env);
+                        try args_array.append(arg_val);
+                    }
+                    const args = try args_array.toOwnedSlice();
+                    defer self.allocator.free(args);
+                    break :blk self.eval_function(func, args);
+                },
             },
         };
+    }
+
+    fn eval_function(self: *@This(), func: obj.Function, args: []*const obj.Object) !*const obj.Object {
+        var inner_env = obj.Environment.init(self.allocator, func.env);
+        const inner_env_ptr = try self.allocator.create(obj.Environment);
+        for (func.parameters, args) |param, arg| {
+            inner_env.put(param.value, arg);
+        }
+        inner_env_ptr.* = inner_env;
+        return self.eval_statements(func.body.statements, inner_env_ptr);
     }
 
     fn eval_statements(self: *@This(), statements: []ast.Statement, env: *obj.Environment) anyerror!*const obj.Object {
@@ -135,7 +165,7 @@ fn test_eval(input: []const u8, allocator: std.mem.Allocator) !*const obj.Object
     var parser = Parser.init(&lexer, allocator);
     var program = try parser.parse_program();
     var evaluator = Evaluator{ .allocator = allocator };
-    var env = obj.Environment.init(allocator);
+    var env = obj.Environment.init(allocator, null);
 
     return try evaluator.eval(Node{ .program = &program }, &env);
 }
@@ -333,5 +363,52 @@ test "func" {
                 return error.UnexpectedObjectType;
             },
         }
+    }
+}
+
+test "func_eval" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const cases = [_]struct {
+        input: []const u8,
+        expected: i64,
+    }{
+        .{ .input = "let identity = fn(x) { x; }; identity(5);", .expected = 5 },
+        .{ .input = "let identity = fn(x) { return x; }; identity(5);", .expected = 5 },
+        .{ .input = "let double = fn(x) { x * 2; }; double(5);", .expected = 10 },
+        .{ .input = "let add = fn(x, y) { x + y; }; add(5, 5);", .expected = 10 },
+        .{ .input = "let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", .expected = 20 },
+        .{ .input = "fn(x) { x; }(5)", .expected = 5 },
+    };
+    for (cases) |case| {
+        const result = try test_eval(case.input, arena.allocator());
+        switch (result.*) {
+            .int => |actual| try std.testing.expectEqual(case.expected, actual.value),
+            inline else => |actual| {
+                std.log.err("\nExpected int, got {}\n", .{actual});
+                return error.UnexpectedObjectType;
+            },
+        }
+    }
+}
+
+test "func_closure" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const input =
+        \\let newAdder = fn(x) {
+        \\    fn(y) { x + y };
+        \\};
+        \\let addTwo = newAdder(2);
+        \\addTwo(2);
+    ;
+    const expected = 4;
+    const result = try test_eval(input, arena.allocator());
+    switch (result.*) {
+        .int => |actual| try std.testing.expectEqual(expected, actual.value),
+        inline else => |actual| {
+            std.log.err("\nExpected int, got {}\n", .{actual});
+            return error.UnexpectedObjectType;
+        },
     }
 }

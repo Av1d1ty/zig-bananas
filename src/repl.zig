@@ -16,22 +16,22 @@ pub fn start() !void {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    var env = Environment.init(alloc);
+    var env = Environment.init(alloc, null);
     defer env.deinit();
 
     while (true) {
         _ = try stdout.write(prompt);
         const maybe_input = try stdin.readUntilDelimiterOrEofAlloc(alloc, '\n', 100);
         if (maybe_input) |input| {
-            defer alloc.free(input);
+            // defer alloc.free(input);
 
             var lexer = Lexer.init(input);
 
             var parser = Parser.init(&lexer, alloc);
-            defer parser.deinit();
+            // defer parser.deinit();
 
             var program = try parser.parse_program();
-            defer program.deinit();
+            // defer program.deinit();
 
             var evaluator = Evaluator{ .allocator = alloc };
             const eval_result = evaluator.eval(Node{ .program = &program }, &env);

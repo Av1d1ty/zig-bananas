@@ -51,12 +51,12 @@ pub const Function = struct {
 };
 
 pub const Environment = struct {
-    outer: ?*const Environment = null,
+    outer: ?*const Environment,
     store: std.StringHashMap(*const Object),
 
-    pub fn init(allocator: std.mem.Allocator) Environment {
+    pub fn init(allocator: std.mem.Allocator, outer_env: ?*const Environment) Environment {
         const store = std.StringHashMap(*const Object).init(allocator);
-        return Environment{ .store = store };
+        return Environment{ .store = store, .outer = outer_env };
     }
 
     pub fn deinit(self: *@This()) void {
