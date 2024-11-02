@@ -34,6 +34,7 @@ pub const Evaluator = struct {
                             .bool => if (right == obj.FALSE) obj.TRUE else obj.FALSE,
                             .null => obj.TRUE,
                             .int => |int| if (int.value == 0) obj.TRUE else obj.FALSE,
+                            .func => error.InvalidOperand,
                         },
                         .minus => switch (right.*) {
                             .int => |int| self.alloc_obj(
@@ -63,7 +64,11 @@ pub const Evaluator = struct {
                     }
                 },
                 .ident => |ident| env.get(ident.value) orelse error.UnboundIdentifier,
-                .func => error.Unimplemented,
+                .func => |func| self.alloc_obj(obj.Object{ .func = obj.Function{
+                    .parameters = func.parameters,
+                    .body = func.body,
+                    .env = env,
+                } }),
                 .call => error.Unimplemented,
             },
         };
@@ -121,27 +126,23 @@ fn is_truthy(object: *const obj.Object) bool {
         .int => |int| int.value != 0,
         .bool => object == obj.TRUE,
         .null => false,
+        .func => true,
     };
 }
 
-fn test_eval(input: []const u8) !obj.Object {
+fn test_eval(input: []const u8, allocator: std.mem.Allocator) !*const obj.Object {
     var lexer = Lexer.init(input);
-    var parser = Parser.init(&lexer, std.testing.allocator);
+    var parser = Parser.init(&lexer, allocator);
     var program = try parser.parse_program();
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    var evaluator = Evaluator{ .allocator = arena.allocator() };
-    var env = obj.Environment.init(arena.allocator());
+    var evaluator = Evaluator{ .allocator = allocator };
+    var env = obj.Environment.init(allocator);
 
-    defer parser.deinit();
-    defer program.deinit();
-    defer arena.deinit();
-    defer env.deinit();
-
-    const eval_result = try evaluator.eval(Node{ .program = &program }, &env);
-    return eval_result.*;
+    return try evaluator.eval(Node{ .program = &program }, &env);
 }
 
 test "integer" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
     const cases = [_]struct {
         input: []const u8,
         expected: union { int: i64, boolean: bool },
@@ -171,8 +172,8 @@ test "integer" {
         .{ .input = "(5 + 10 * 2 + 15 / 3) * 2 + -10", .expected = .{ .int = 50 } },
     };
     for (cases) |case| {
-        const result = try test_eval(case.input);
-        switch (result) {
+        const result = try test_eval(case.input, arena.allocator());
+        switch (result.*) {
             .int => |actual| try std.testing.expectEqual(case.expected.int, actual.value),
             .bool => |actual| try std.testing.expectEqual(case.expected.boolean, actual.value),
             inline else => |actual| {
@@ -184,6 +185,8 @@ test "integer" {
 }
 
 test "boolean" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
     const cases = [_]struct {
         input: []const u8,
         expected: bool,
@@ -200,8 +203,8 @@ test "boolean" {
         .{ .input = "(1 > 2) == false", .expected = true },
     };
     for (cases) |case| {
-        const result = try test_eval(case.input);
-        switch (result) {
+        const result = try test_eval(case.input, arena.allocator());
+        switch (result.*) {
             .bool => |actual| try std.testing.expectEqual(case.expected, actual.value),
             inline else => |actual| {
                 std.log.err("\nExpected bool, got {}\n", .{actual});
@@ -212,6 +215,8 @@ test "boolean" {
 }
 
 test "bang" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
     const cases = [_]struct {
         input: []const u8,
         expected: bool,
@@ -222,8 +227,8 @@ test "bang" {
         .{ .input = "!!false", .expected = false },
     };
     for (cases) |case| {
-        const result = try test_eval(case.input);
-        switch (result) {
+        const result = try test_eval(case.input, arena.allocator());
+        switch (result.*) {
             .bool => |actual| try std.testing.expectEqual(case.expected, actual.value),
             inline else => |actual| {
                 std.log.err("\nExpected bool, got {}\n", .{actual});
@@ -234,6 +239,8 @@ test "bang" {
 }
 
 test "if_else" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
     const cases = [_]struct {
         input: []const u8,
         expected: obj.Object,
@@ -247,8 +254,8 @@ test "if_else" {
         .{ .input = "if (1 < 2) { 10 } else { 20 }", .expected = .{ .int = .{ .value = 10 } } },
     };
     for (cases) |case| {
-        const result = try test_eval(case.input);
-        switch (result) {
+        const result = try test_eval(case.input, arena.allocator());
+        switch (result.*) {
             .int => |actual| try std.testing.expectEqual(case.expected.int.value, actual.value),
             .null => try std.testing.expect(case.expected == .null),
             inline else => |actual| {
@@ -260,6 +267,8 @@ test "if_else" {
 }
 
 test "return" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
     const cases = [_]struct {
         input: []const u8,
         expected: obj.Object,
@@ -271,8 +280,8 @@ test "return" {
         .{ .input = "if (10 > 1) { if (10 > 1) { return 10; } return 1; }", .expected = .{ .int = .{ .value = 10 } } },
     };
     for (cases) |case| {
-        const result = try test_eval(case.input);
-        switch (result) {
+        const result = try test_eval(case.input, arena.allocator());
+        switch (result.*) {
             .int => |actual| try std.testing.expectEqual(case.expected.int.value, actual.value),
             inline else => |actual| {
                 std.log.err("\nExpected int, got {}\n", .{actual});
@@ -283,7 +292,8 @@ test "return" {
 }
 
 test "let" {
-    // TODO: test errors
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
     const cases = [_]struct {
         input: []const u8,
         expected: obj.Object,
@@ -294,11 +304,32 @@ test "let" {
         .{ .input = "let a = 5; let b = a; let c = a + b + 5; c;", .expected = .{ .int = .{ .value = 15 } } },
     };
     for (cases) |case| {
-        const result = try test_eval(case.input);
-        switch (result) {
+        const result = try test_eval(case.input, arena.allocator());
+        switch (result.*) {
             .int => |actual| try std.testing.expectEqual(case.expected.int.value, actual.value),
             inline else => |actual| {
                 std.log.err("\nExpected int, got {}\n", .{actual});
+                return error.UnexpectedObjectType;
+            },
+        }
+    }
+}
+
+test "func" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const cases = [_]struct {
+        input: []const u8,
+        expected: []const u8,
+    }{
+        .{ .input = "fn(x) { x + 2; }", .expected = "fn(x) { (x + 2); }" },
+    };
+    for (cases) |case| {
+        const result = try test_eval(case.input, arena.allocator());
+        switch (result.*) {
+            .func => |actual| try std.testing.expectFmt(case.expected, "{}", .{actual}),
+            inline else => |actual| {
+                std.log.err("\nExpected func, got {}\n", .{actual});
                 return error.UnexpectedObjectType;
             },
         }

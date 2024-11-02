@@ -1,4 +1,5 @@
 const std = @import("std");
+const ast = @import("ast.zig");
 
 pub const NULL = &Object{ .null = .{} };
 pub const TRUE = &Object{ .bool = .{ .value = true } };
@@ -7,6 +8,7 @@ pub const FALSE = &Object{ .bool = .{ .value = false } };
 pub const Object = union(enum) {
     int: Integer,
     bool: Boolean,
+    func: Function,
     null: Null,
 
     pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
@@ -14,6 +16,7 @@ pub const Object = union(enum) {
         if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
         return switch (self) {
             .null => writer.writeAll("null"),
+            .func => |func| writer.print("{}", .{func}),
             inline else => |obj| writer.print("{any}", .{obj.value}),
         };
     }
@@ -27,6 +30,24 @@ pub const Boolean = struct {
 
 pub const Integer = struct {
     value: i64,
+};
+
+pub const Function = struct {
+    parameters: []ast.Identifier,
+    body: ast.BlockStatement,
+    env: *Environment,
+
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = options;
+        if (fmt.len != 0) std.fmt.invalidFmtError(fmt, self);
+        try writer.writeAll("fn(");
+        for (1.., self.parameters) |i, param| {
+            try writer.print("{}", .{param});
+            if (self.parameters.len != 1 and i != self.parameters.len) try writer.writeAll(", ");
+        }
+        try writer.writeAll(") ");
+        try writer.print("{{ {} }}", .{self.body});
+    }
 };
 
 pub const Environment = struct {
