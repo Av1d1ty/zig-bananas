@@ -23,19 +23,26 @@ pub fn start() !void {
         _ = try stdout.write(prompt);
         const maybe_input = try stdin.readUntilDelimiterOrEofAlloc(alloc, '\n', 100);
         if (maybe_input) |input| {
-            // defer alloc.free(input);
-
             var lexer = Lexer.init(input);
-
             var parser = Parser.init(&lexer, alloc);
-            // defer parser.deinit();
-
             var program = try parser.parse_program();
-            // defer program.deinit();
+
+            if (parser.errors.items.len > 0) {
+                for (parser.errors.items) |err| {
+                    try stdout.print(
+                        "Parse {!}: col {d}, token '{}'\n",
+                        .{ err.err, err.col, err.token },
+                    );
+                }
+                continue;
+            }
 
             var evaluator = Evaluator{ .allocator = alloc };
-            const eval_result = evaluator.eval(Node{ .program = &program }, &env);
-            try stdout.print("{!}\n", .{eval_result});
+            const eval_result = evaluator.eval(Node{ .program = &program }, &env) catch |err| {
+                try stdout.print("Evaluation {!}\n", .{err});
+                continue;
+            };
+            try stdout.print("{}\n", .{eval_result});
         }
     }
 }
