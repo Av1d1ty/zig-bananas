@@ -3,6 +3,7 @@ const std = @import("std");
 pub const Token = union(enum) {
     ident: []const u8,
     int: []const u8,
+    string: []const u8,
 
     illegal,
     eof,
@@ -53,7 +54,7 @@ pub const Token = union(enum) {
 
     pub fn get_value(self: Token) ?[]const u8 {
         return switch (self) {
-            Token.ident, Token.int => |val| val,
+            Token.ident, Token.int, Token.string => |val| val,
             else => null,
         };
     }
@@ -64,6 +65,7 @@ pub const Token = union(enum) {
         const string = switch (self) {
             .int => |int| int,
             .ident => |ident| ident,
+            .string => |string| string,
             .assign => "=",
             .plus => "+",
             .minus => "-",

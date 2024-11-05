@@ -84,6 +84,7 @@ pub const Lexer = struct {
             0 => .eof,
             'A'...'Z', 'a'...'z', '_' => return Token.lookup_ident(self.read_identifier()),
             '0'...'9' => return .{ .int = self.read_int() },
+            '"' => return .{ .string = self.read_str() },
             else => .illegal,
         };
         self.snapshot_frame.next_token.tok = token; // HACK:
@@ -115,6 +116,16 @@ pub const Lexer = struct {
             self.read_char();
         }
         return self.input[position..self.position];
+    }
+
+    fn read_str(self: *Lexer) []const u8 {
+        const position = self.position + 1;
+        self.read_char();
+        while (self.ch != '"' and self.ch != 0) {
+            self.read_char();
+        }
+        self.read_char();
+        return self.input[position..self.position-1];
     }
 
     fn is_letter(ch: u8) bool {
@@ -168,26 +179,29 @@ test "next_token" {
         \\
         \\10 == 10;
         \\10 != 9;
+        \\"foobar";
+        \\"foo bar";
     ;
     const tests = [_]Token{
-        .let,              .{ .ident = "five" }, .assign,             .{ .int = "5" },
-        .semicolon,        .let,                 .{ .ident = "ten" }, .assign,
-        .{ .int = "10" },  .semicolon,           .let,                .{ .ident = "add" },
-        .assign,           .function,            .lparen,             .{ .ident = "x" },
-        .comma,            .{ .ident = "y" },    .rparen,             .lbrace,
-        .{ .ident = "x" }, .plus,                .{ .ident = "y" },   .semicolon,
-        .rbrace,           .semicolon,           .let,                .{ .ident = "result" },
-        .assign,           .{ .ident = "add" },  .lparen,             .{ .ident = "five" },
-        .comma,            .{ .ident = "ten" },  .rparen,             .semicolon,
-        .bang,             .minus,               .slash,              .asterisk,
-        .{ .int = "5" },   .semicolon,           .{ .int = "5" },     .lt,
-        .{ .int = "10" },  .gt,                  .{ .int = "5" },     .semicolon,
-        .if_token,         .lparen,              .{ .int = "5" },     .lt,
-        .{ .int = "10" },  .rparen,              .lbrace,             .return_token,
-        .true_token,       .semicolon,           .rbrace,             .else_token,
-        .lbrace,           .return_token,        .false_token,        .semicolon,
-        .rbrace,           .{ .int = "10" },     .eq,                 .{ .int = "10" },
-        .semicolon,        .{ .int = "10" },     .not_eq,             .{ .int = "9" },
+        .let,              .{ .ident = "five" },    .assign,             .{ .int = "5" },
+        .semicolon,        .let,                    .{ .ident = "ten" }, .assign,
+        .{ .int = "10" },  .semicolon,              .let,                .{ .ident = "add" },
+        .assign,           .function,               .lparen,             .{ .ident = "x" },
+        .comma,            .{ .ident = "y" },       .rparen,             .lbrace,
+        .{ .ident = "x" }, .plus,                   .{ .ident = "y" },   .semicolon,
+        .rbrace,           .semicolon,              .let,                .{ .ident = "result" },
+        .assign,           .{ .ident = "add" },     .lparen,             .{ .ident = "five" },
+        .comma,            .{ .ident = "ten" },     .rparen,             .semicolon,
+        .bang,             .minus,                  .slash,              .asterisk,
+        .{ .int = "5" },   .semicolon,              .{ .int = "5" },     .lt,
+        .{ .int = "10" },  .gt,                     .{ .int = "5" },     .semicolon,
+        .if_token,         .lparen,                 .{ .int = "5" },     .lt,
+        .{ .int = "10" },  .rparen,                 .lbrace,             .return_token,
+        .true_token,       .semicolon,              .rbrace,             .else_token,
+        .lbrace,           .return_token,           .false_token,        .semicolon,
+        .rbrace,           .{ .int = "10" },        .eq,                 .{ .int = "10" },
+        .semicolon,        .{ .int = "10" },        .not_eq,             .{ .int = "9" },
+        .semicolon,        .{ .string = "foobar" }, .semicolon,          .{ .string = "foo bar" },
         .semicolon,        .eof,
     };
 
