@@ -127,6 +127,7 @@ pub const Parser = struct {
             .return_token => .{ .ret = try self.parse_return_statement() },
             .ident,
             .int,
+            .string,
             .minus,
             .bang,
             .lparen,
@@ -236,6 +237,10 @@ pub const Parser = struct {
             .int => ast.Expression{ .int = ast.Integer{
                 .token = self.curr_token,
                 .value = try std.fmt.parseInt(i64, self.curr_token.get_value().?, 10),
+            } },
+            .string => ast.Expression{ .str = ast.String{
+                .token = self.curr_token,
+                .value = self.curr_token.get_value().?,
             } },
             .true_token, .false_token => ast.Expression{ .bool = ast.Boolean{
                 .token = self.curr_token,
@@ -431,6 +436,38 @@ test "integers" {
     }
 }
 
+test "strings" {
+    const input =
+        \\ "Your blade..."
+        \\ "did not cut deep enough."
+    ;
+
+    const cases = [_]ast.String{
+        ast.String{ .token = .{ .string = "Your blade..." }, .value = "Your blade..." },
+        ast.String{ .token = .{ .string = "did not cut deep enough." }, .value = "did not cut deep enough." },
+    };
+
+    var lexer = Lexer.init(input);
+    var parser = Parser.init(&lexer, std.testing.allocator);
+    var program = try parser.parse_program();
+
+    defer parser.deinit();
+    defer program.deinit();
+
+    parser.print_errors();
+    try expect(program.statements.len == cases.len);
+    try expect(parser.errors.items.len == 0);
+
+    // std.debug.print("\n{}", .{program});
+
+    for (program.statements, cases) |actual, expected| {
+        if (actual == .exp and actual.exp.expression.* == .str) {
+            try std.testing.expectEqualDeep(expected, actual.exp.expression.str);
+        } else {
+            return ParserError.UnexpectedAstNode;
+        }
+    }
+}
 test "identifiers" {
     const input =
         \\ foobar

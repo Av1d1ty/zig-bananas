@@ -7,6 +7,7 @@ pub const FALSE = &Object{ .bool = .{ .value = false } };
 
 pub const Object = union(enum) {
     int: Integer,
+    str: String,
     bool: Boolean,
     func: Function,
     null: Null,
@@ -17,6 +18,7 @@ pub const Object = union(enum) {
         return switch (self) {
             .null => writer.writeAll("null"),
             .func => |func| writer.print("{}", .{func}),
+            .str => |str| writer.print("\"{s}\"", .{str.value}),
             inline else => |obj| writer.print("{any}", .{obj.value}),
         };
     }
@@ -30,6 +32,10 @@ pub const Boolean = struct {
 
 pub const Integer = struct {
     value: i64,
+};
+
+pub const String = struct {
+    value: []const u8,
 };
 
 pub const Function = struct {

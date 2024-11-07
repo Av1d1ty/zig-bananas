@@ -26,6 +26,7 @@ pub const Evaluator = struct {
             },
             .expression => |expr| switch (expr.*) {
                 .int => |int| self.alloc_obj(obj.Object{ .int = obj.Integer{ .value = int.value } }),
+                .str => |str| self.alloc_obj(obj.Object{ .str = obj.String{ .value = str.value } }),
                 .bool => |boolean| if (boolean.value) obj.TRUE else obj.FALSE,
                 .pref => |pref| blk: {
                     const right = try self.eval(Node{ .expression = pref.right }, env);
@@ -34,7 +35,7 @@ pub const Evaluator = struct {
                             .bool => if (right == obj.FALSE) obj.TRUE else obj.FALSE,
                             .null => obj.TRUE,
                             .int => |int| if (int.value == 0) obj.TRUE else obj.FALSE,
-                            .func => error.InvalidOperand,
+                            .str, .func => error.InvalidOperand,
                         },
                         .minus => switch (right.*) {
                             .int => |int| self.alloc_obj(
@@ -154,6 +155,7 @@ fn eval_infix_bool(op: ast.InfixOperator, left: *const obj.Object, right: *const
 fn is_truthy(object: *const obj.Object) bool {
     return switch (object.*) {
         .int => |int| int.value != 0,
+        .str => |str| str.value.len > 0,
         .bool => object == obj.TRUE,
         .null => false,
         .func => true,
@@ -208,6 +210,28 @@ test "integer" {
             .bool => |actual| try std.testing.expectEqual(case.expected.boolean, actual.value),
             inline else => |actual| {
                 std.log.err("\nExpected int or bool, got {}\n", .{actual});
+                return error.UnexpectedObjectType;
+            },
+        }
+    }
+}
+
+test "string" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const cases = [_]struct {
+        input: []const u8,
+        expected: []const u8,
+    }{
+        .{ .input = "\"Your blade...\"", .expected = "Your blade..." },
+        .{ .input = "\"did not cut deep enough.\"", .expected = "did not cut deep enough." },
+    };
+    for (cases) |case| {
+        const result = try test_eval(case.input, arena.allocator());
+        switch (result.*) {
+            .str => |actual| try std.testing.expectEqualStrings(case.expected, actual.value),
+            inline else => |actual| {
+                std.log.err("\nExpected string, got {}\n", .{actual});
                 return error.UnexpectedObjectType;
             },
         }
