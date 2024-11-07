@@ -51,6 +51,7 @@ pub const Evaluator = struct {
                     break :blk switch (left.*) {
                         .bool => if (right.* == .bool) eval_infix_bool(inf.operator, left, right) else error.InvalidOperand,
                         .int => |l_int| if (right.* == .int) self.eval_infix_int(inf.operator, l_int, right.int) else error.InvalidOperand,
+                        .str => |l_str| if (right.* == .str) self.concat_strings(l_str, right.str) else error.InvalidOperand,
                         else => error.UnsupportedInfixOperation,
                     };
                 },
@@ -115,7 +116,7 @@ pub const Evaluator = struct {
         return result;
     }
 
-    fn eval_infix_int(self: @This(), op: ast.InfixOperator, left: obj.Integer, right: obj.Integer) !*const obj.Object {
+    fn eval_infix_int(self: *@This(), op: ast.InfixOperator, left: obj.Integer, right: obj.Integer) !*const obj.Object {
         const value = switch (op) {
             .plus => left.value + right.value,
             .minus => left.value - right.value,
@@ -129,7 +130,12 @@ pub const Evaluator = struct {
         return self.alloc_obj(obj.Object{ .int = obj.Integer{ .value = value } });
     }
 
-    fn alloc_obj(self: @This(), object: obj.Object) *const obj.Object {
+    fn concat_strings(self: *@This(), left_str: obj.String, right_str: obj.String) !*const obj.Object {
+        const string = try std.fmt.allocPrint(self.allocator, "{s}{s}", .{left_str.value, right_str.value});
+        return self.alloc_obj(.{ .str = .{.value = string} });
+    }
+
+    fn alloc_obj(self: *@This(), object: obj.Object) *const obj.Object {
         const ptr = self.allocator.create(obj.Object) catch unreachable;
         ptr.* = object;
         return ptr;
@@ -225,6 +231,7 @@ test "string" {
     }{
         .{ .input = "\"Your blade...\"", .expected = "Your blade..." },
         .{ .input = "\"did not cut deep enough.\"", .expected = "did not cut deep enough." },
+        .{ .input = "\"Your blade... \" + \"did not cut deep enough.\"", .expected = "Your blade... did not cut deep enough." },
     };
     for (cases) |case| {
         const result = try test_eval(case.input, arena.allocator());
